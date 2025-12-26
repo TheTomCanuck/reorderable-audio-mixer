@@ -3,14 +3,23 @@
 # Reference files (OBS installation for development)
 reference-files/
 
+# Logs
+logs/
+crash-logs/
+
 # Build outputs
 build/
+build_x64/
 out/
 release/
 debug/
 x64/
 x86/
 Win32/
+
+# Dependencies (created by setup.bat)
+.deps/
+cmake/
 
 # CMake
 CMakeCache.txt
@@ -60,4 +69,5 @@ desktop.ini
 # Package managers
 node_modules/
 
-reference-files/
+# Package output
+better-audio-mixer-v*/
