@@ -7,7 +7,7 @@
 #include <QMainWindow>
 
 OBS_DECLARE_MODULE()
-OBS_MODULE_AUTHOR("obs-better-audio-mixer")
+OBS_MODULE_AUTHOR("TheTomCanuck")
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 static AudioMixerDock *mixer_dock = nullptr;
@@ -36,7 +36,7 @@ static void frontend_event_callback(obs_frontend_event event, void *)
 
 bool obs_module_load(void)
 {
-	blog(LOG_INFO, "[Better Audio Mixer] loaded version %s", PROJECT_VERSION);
+	blog(LOG_INFO, "[Reorderable Audio Mixer] loaded version %s", PROJECT_VERSION);
 	obs_frontend_add_event_callback(frontend_event_callback, nullptr);
 	return true;
 }
@@ -50,18 +50,18 @@ void obs_module_post_load(void)
 	const QString title = QString::fromUtf8(obs_module_text("BetterAudioMixer"));
 	obs_frontend_add_dock_by_id(PLUGIN_NAME, title.toUtf8().constData(), mixer_dock);
 
-	blog(LOG_INFO, "[Better Audio Mixer] Dock registered");
+	blog(LOG_INFO, "[Reorderable Audio Mixer] Dock registered");
 }
 
 void obs_module_unload(void)
 {
 	obs_frontend_remove_event_callback(frontend_event_callback, nullptr);
-	blog(LOG_INFO, "[Better Audio Mixer] unloaded");
+	blog(LOG_INFO, "[Reorderable Audio Mixer] unloaded");
 }
 
 MODULE_EXPORT const char *obs_module_description(void)
 {
-	return "Better Audio Mixer - Reorderable audio mixer dock";
+	return "Reorderable Audio Mixer - Audio mixer dock with drag-and-drop reordering";
 }
 
 MODULE_EXPORT const char *obs_module_name(void)

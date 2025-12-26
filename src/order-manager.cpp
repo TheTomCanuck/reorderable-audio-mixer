@@ -39,7 +39,7 @@ void OrderManager::Load()
 
 	obs_data_t *data = obs_data_create_from_json_file_safe(path.c_str(), "bak");
 	if (!data) {
-		blog(LOG_INFO, "[Better Audio Mixer] No saved order found");
+		blog(LOG_INFO, "[Reorderable Audio Mixer] No saved order found");
 		return;
 	}
 
@@ -78,7 +78,7 @@ void OrderManager::Load()
 	}
 
 	obs_data_release(data);
-	blog(LOG_INFO, "[Better Audio Mixer] Loaded order for %zu collections",
+	blog(LOG_INFO, "[Reorderable Audio Mixer] Loaded order for %zu collections",
 		orderByCollection.size());
 }
 
@@ -117,9 +117,9 @@ void OrderManager::Save()
 	obs_data_release(collections);
 
 	if (obs_data_save_json_safe(data, path.c_str(), "tmp", "bak")) {
-		blog(LOG_INFO, "[Better Audio Mixer] Saved order config");
+		blog(LOG_INFO, "[Reorderable Audio Mixer] Saved order config");
 	} else {
-		blog(LOG_ERROR, "[Better Audio Mixer] Failed to save order config");
+		blog(LOG_ERROR, "[Reorderable Audio Mixer] Failed to save order config");
 	}
 
 	obs_data_release(data);

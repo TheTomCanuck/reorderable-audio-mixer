@@ -33,14 +33,14 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.github.obs-better-audio-mixer"
+            "bundleId": "com.github.reorderable-audio-mixer"
         }
     },
-    "name": "better-audio-mixer",
-    "displayName": "Better Audio Mixer",
+    "name": "reorderable-audio-mixer",
+    "displayName": "Reorderable Audio Mixer",
     "version": "1.0.0",
-    "author": "obs-better-audio-mixer",
-    "website": "https://github.com/obs-better-audio-mixer",
+    "author": "TheTomCanuck",
+    "website": "https://github.com/TheTomCanuck/reorderable-audio-mixer",
     "email": "noreply@example.com",
     "uuids": {
         "windowsApp": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"

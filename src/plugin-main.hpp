@@ -3,4 +3,4 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 
-#define PLUGIN_NAME "better-audio-mixer"
+#define PLUGIN_NAME "reorderable-audio-mixer"
