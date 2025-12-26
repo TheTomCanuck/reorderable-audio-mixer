@@ -2,7 +2,11 @@
 #include "volume-meter.hpp"
 
 #include <obs-module.h>
+#include <obs-frontend-api.h>
 
+#include <QCursor>
+#include <QAction>
+#include <QMainWindow>
 #include <cmath>
 
 MixerItem::MixerItem(OBSSource source_, bool vertical_, QWidget *parent)
@@ -70,60 +74,85 @@ void MixerItem::SetupUI()
 
 	QVBoxLayout *mainLayout = new QVBoxLayout(this);
 	mainLayout->setContentsMargins(6, 6, 6, 6);
-	mainLayout->setSpacing(4);
+	mainLayout->setSpacing(2);
 
-	// Top row: Name and reorder buttons
-	QHBoxLayout *topRow = new QHBoxLayout();
-	topRow->setSpacing(4);
+	// Row 1: Name and reorder buttons
+	// [name                    ] [^][v]
+	QHBoxLayout *nameRow = new QHBoxLayout();
+	nameRow->setSpacing(4);
 
 	nameLabel = new QLabel(GetSourceName());
 	nameLabel->setStyleSheet("font-weight: bold;");
-	topRow->addWidget(nameLabel, 1);
+	nameRow->addWidget(nameLabel, 1);
 
 	upButton = new QPushButton();
-	upButton->setFixedSize(24, 24);
+	upButton->setProperty("class", "icon-up");
+	upButton->setFixedSize(16, 16);
+	upButton->setFlat(true);
 	upButton->setToolTip(obs_module_text("BetterAudioMixer.MoveUp"));
-	upButton->setText(QString::fromUtf8("\u25B2")); // Up arrow
 	connect(upButton, &QPushButton::clicked, this, &MixerItem::OnMoveUp);
-	topRow->addWidget(upButton);
+	nameRow->addWidget(upButton);
 
 	downButton = new QPushButton();
-	downButton->setFixedSize(24, 24);
+	downButton->setProperty("class", "icon-down");
+	downButton->setFixedSize(16, 16);
+	downButton->setFlat(true);
 	downButton->setToolTip(obs_module_text("BetterAudioMixer.MoveDown"));
-	downButton->setText(QString::fromUtf8("\u25BC")); // Down arrow
 	connect(downButton, &QPushButton::clicked, this, &MixerItem::OnMoveDown);
-	topRow->addWidget(downButton);
+	nameRow->addWidget(downButton);
 
-	mainLayout->addLayout(topRow);
+	mainLayout->addLayout(nameRow);
 
-	// Middle row: Volume meter
+	// Row 2: Config button + Volume meter + dB label
+	// [config] [========meter========] [dB]
+	QHBoxLayout *meterRow = new QHBoxLayout();
+	meterRow->setSpacing(4);
+
+	configButton = new QPushButton();
+	configButton->setProperty("class", "icon-dots-vert");
+	configButton->setFixedSize(22, 22);
+	configButton->setFlat(true);
+	configButton->setToolTip(obs_module_text("BetterAudioMixer.Config"));
+	connect(configButton, &QPushButton::clicked, this, &MixerItem::OnConfigClicked);
+	meterRow->addWidget(configButton);
+
 	volMeter = new VolumeMeter(this);
 	volMeter->setMinimumHeight(20);
-	mainLayout->addWidget(volMeter);
+	meterRow->addWidget(volMeter, 1);
 
-	// Bottom row: Slider, volume label, mute
-	QHBoxLayout *bottomRow = new QHBoxLayout();
-	bottomRow->setSpacing(4);
+	volLabel = new QLabel();
+	volLabel->setFixedWidth(50);
+	volLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+	meterRow->addWidget(volLabel);
+
+	mainLayout->addLayout(meterRow);
+
+	// Row 3: Mute checkbox + Slider
+	// [mute  ] [========slider=======]
+	QHBoxLayout *sliderRow = new QHBoxLayout();
+	sliderRow->setSpacing(4);
+
+	muteCheckbox = new QCheckBox();
+	muteCheckbox->setProperty("class", "indicator-mute");
+	muteCheckbox->setFixedSize(22, 22);
+	muteCheckbox->setToolTip(obs_module_text("BetterAudioMixer.Mute"));
+	muteCheckbox->setChecked(obs_source_muted(source));
+	connect(muteCheckbox, &QCheckBox::toggled, this, &MixerItem::OnMuteToggled);
+	sliderRow->addWidget(muteCheckbox);
 
 	slider = new QSlider(Qt::Horizontal);
 	slider->setMinimum(0);
 	slider->setMaximum(static_cast<int>(FADER_PRECISION));
 	slider->setValue(static_cast<int>(obs_fader_get_deflection(obs_fader) * FADER_PRECISION));
 	connect(slider, &QSlider::valueChanged, this, &MixerItem::OnSliderChanged);
-	bottomRow->addWidget(slider, 1);
+	sliderRow->addWidget(slider, 1);
 
-	volLabel = new QLabel();
-	volLabel->setFixedWidth(50);
-	volLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-	bottomRow->addWidget(volLabel);
+	// Spacer to align slider end with meter end (same width as volLabel)
+	QWidget *sliderSpacer = new QWidget();
+	sliderSpacer->setFixedWidth(50);
+	sliderRow->addWidget(sliderSpacer);
 
-	muteCheckbox = new QCheckBox();
-	muteCheckbox->setToolTip("Mute");
-	muteCheckbox->setChecked(obs_source_muted(source));
-	connect(muteCheckbox, &QCheckBox::toggled, this, &MixerItem::OnMuteToggled);
-	bottomRow->addWidget(muteCheckbox);
-
-	mainLayout->addLayout(bottomRow);
+	mainLayout->addLayout(sliderRow);
 
 	setLayout(mainLayout);
 }
@@ -176,11 +205,8 @@ void MixerItem::OBSVolumeLevel(void *data,
 {
 	MixerItem *item = static_cast<MixerItem *>(data);
 	if (item->volMeter) {
-		QMetaObject::invokeMethod(item->volMeter, "setLevels",
-			Qt::QueuedConnection,
-			Q_ARG(float, magnitude[0]),
-			Q_ARG(float, peak[0]),
-			Q_ARG(float, inputPeak[0]));
+		// setLevels is thread-safe (uses mutex internally)
+		item->volMeter->setLevels(magnitude, peak, inputPeak);
 	}
 }
 
@@ -201,7 +227,7 @@ void MixerItem::VolumeMuted(bool muted)
 	muteCheckbox->blockSignals(false);
 
 	if (volMeter) {
-		volMeter->setMuted(muted);
+		volMeter->muted = muted;
 	}
 }
 
@@ -254,4 +280,44 @@ void MixerItem::SetVertical(bool vert)
 {
 	vertical = vert;
 	// TODO: Implement layout change for vertical mode
+}
+
+void MixerItem::OnConfigClicked()
+{
+	QMenu menu(this);
+
+	QAction *filtersAction = menu.addAction(obs_module_text("BetterAudioMixer.Filters"));
+	connect(filtersAction, &QAction::triggered, this, &MixerItem::OnFiltersClicked);
+
+	QAction *propertiesAction = menu.addAction(obs_module_text("BetterAudioMixer.Properties"));
+	connect(propertiesAction, &QAction::triggered, this, &MixerItem::OnPropertiesClicked);
+
+	menu.addSeparator();
+
+	QAction *advAudioAction = menu.addAction(obs_module_text("BetterAudioMixer.AdvancedAudio"));
+	connect(advAudioAction, &QAction::triggered, this, &MixerItem::OnAdvancedAudioClicked);
+
+	menu.exec(QCursor::pos());
+}
+
+void MixerItem::OnFiltersClicked()
+{
+	obs_frontend_open_source_filters(source);
+}
+
+void MixerItem::OnPropertiesClicked()
+{
+	obs_frontend_open_source_properties(source);
+}
+
+void MixerItem::OnAdvancedAudioClicked()
+{
+	// Open the Advanced Audio Properties dialog
+	QMainWindow *main = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+	if (!main)
+		return;
+
+	QAction *action = main->findChild<QAction *>("actionAdvAudioProperties");
+	if (action)
+		action->trigger();
 }

@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QMenu>
 
 #include <vector>
 
@@ -39,6 +40,10 @@ private slots:
 	void OnMoveDown();
 	void OnMuteToggled(bool checked);
 	void OnSliderChanged(int value);
+	void OnConfigClicked();
+	void OnFiltersClicked();
+	void OnPropertiesClicked();
+	void OnAdvancedAudioClicked();
 
 	void VolumeChanged();
 	void VolumeMuted(bool muted);
@@ -68,6 +73,7 @@ private:
 	QCheckBox *muteCheckbox = nullptr;
 	QPushButton *upButton = nullptr;
 	QPushButton *downButton = nullptr;
+	QPushButton *configButton = nullptr;
 
 	// OBS handles
 	OBSFader obs_fader;
