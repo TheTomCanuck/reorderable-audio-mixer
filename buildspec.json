@@ -1,0 +1,48 @@
+{
+    "dependencies": {
+        "obs-studio": {
+            "version": "32.0.0",
+            "baseUrl": "https://github.com/obsproject/obs-studio/archive/refs/tags",
+            "label": "OBS sources",
+            "hashes": {
+                "macos": "8b91b13f966d018ef2de20d74b85857374bac263f30e13ec1e9acb0212413b94",
+                "windows-x64": "8b91b13f966d018ef2de20d74b85857374bac263f30e13ec1e9acb0212413b94"
+            }
+        },
+        "prebuilt": {
+            "version": "2025-05-23",
+            "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
+            "label": "Pre-Built obs-deps",
+            "hashes": {
+                "macos": "7b1448581b92c6f8d4e2f9b1b10eb318ebfc4df7255638e05bacb49b620e190d",
+                "windows-x64": "88dc7bab50542b4b58194cdd5d7e6f4b73cde7c0d1ee7a040a6d9c9df05187b1"
+            }
+        },
+        "qt6": {
+            "version": "2025-05-23",
+            "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
+            "label": "Pre-Built Qt6",
+            "hashes": {
+                "macos": "d4945fe719d31d353dc76298f58823d7891126e33af5029f763427ea9f80bfaa",
+                "windows-x64": "bd80383dc799c0bba2f7fae793613b3fbd2cc3a3712b3d3b63b490721d187d9e"
+            },
+            "debugSymbols": {
+                "windows-x64": "9c9a15c5dbe59eb6a1c31c06b7208f3c4403671fbdfaef341cac3beb7af24ea1"
+            }
+        }
+    },
+    "platformConfig": {
+        "macos": {
+            "bundleId": "com.github.obs-better-audio-mixer"
+        }
+    },
+    "name": "better-audio-mixer",
+    "displayName": "Better Audio Mixer",
+    "version": "1.0.0",
+    "author": "obs-better-audio-mixer",
+    "website": "https://github.com/obs-better-audio-mixer",
+    "email": "noreply@example.com",
+    "uuids": {
+        "windowsApp": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
+    }
+}

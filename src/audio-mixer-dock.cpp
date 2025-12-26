@@ -1,0 +1,365 @@
+#include "audio-mixer-dock.hpp"
+#include "mixer-item.hpp"
+#include "order-manager.hpp"
+
+#include <obs-module.h>
+#include <obs-frontend-api.h>
+
+#include <QScrollBar>
+
+AudioMixerDock::AudioMixerDock(QWidget *parent)
+	: QFrame(parent),
+	  orderManager(new OrderManager())
+{
+	SetupUI();
+	ConnectSignalHandlers();
+
+	// Load saved order
+	orderManager->Load();
+
+	// Get current scene collection name
+	char *collection = obs_frontend_get_current_scene_collection();
+	if (collection) {
+		orderManager->SetCurrentCollection(collection);
+		bfree(collection);
+	}
+}
+
+AudioMixerDock::~AudioMixerDock()
+{
+	DisconnectSignalHandlers();
+	ClearMixerItems();
+	delete orderManager;
+}
+
+void AudioMixerDock::SetupUI()
+{
+	mainLayout = new QVBoxLayout(this);
+	mainLayout->setContentsMargins(0, 0, 0, 0);
+	mainLayout->setSpacing(0);
+
+	scrollArea = new QScrollArea(this);
+	scrollArea->setFrameShape(QFrame::NoFrame);
+	scrollArea->setWidgetResizable(true);
+	scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+	scrollWidget = new QWidget();
+	mixerLayout = new QVBoxLayout(scrollWidget);
+	mixerLayout->setContentsMargins(4, 4, 4, 4);
+	mixerLayout->setSpacing(4);
+	mixerLayout->setAlignment(Qt::AlignTop);
+
+	// Empty state label
+	emptyLabel = new QLabel(obs_module_text("BetterAudioMixer.NoAudioSources"));
+	emptyLabel->setAlignment(Qt::AlignCenter);
+	emptyLabel->setStyleSheet("color: gray; padding: 20px;");
+	mixerLayout->addWidget(emptyLabel);
+
+	scrollArea->setWidget(scrollWidget);
+	mainLayout->addWidget(scrollArea);
+
+	setLayout(mainLayout);
+}
+
+void AudioMixerDock::ConnectSignalHandlers()
+{
+	signal_handler_t *handler = obs_get_signal_handler();
+
+	// Source activated (becomes visible/active)
+	signalHandlers.emplace_back(handler, "source_activate",
+		[](void *data, calldata_t *params) {
+			auto *dock = static_cast<AudioMixerDock *>(data);
+			obs_source_t *source = static_cast<obs_source_t *>(calldata_ptr(params, "source"));
+
+			uint32_t flags = obs_source_get_output_flags(source);
+			if (flags & OBS_SOURCE_AUDIO) {
+				QMetaObject::invokeMethod(dock, "ActivateAudioSource",
+					Qt::QueuedConnection,
+					Q_ARG(OBSSource, OBSSource(source)));
+			}
+		}, this);
+
+	// Source deactivated
+	signalHandlers.emplace_back(handler, "source_deactivate",
+		[](void *data, calldata_t *params) {
+			auto *dock = static_cast<AudioMixerDock *>(data);
+			obs_source_t *source = static_cast<obs_source_t *>(calldata_ptr(params, "source"));
+
+			uint32_t flags = obs_source_get_output_flags(source);
+			if (flags & OBS_SOURCE_AUDIO) {
+				QMetaObject::invokeMethod(dock, "DeactivateAudioSource",
+					Qt::QueuedConnection,
+					Q_ARG(OBSSource, OBSSource(source)));
+			}
+		}, this);
+
+	// Audio specifically activated
+	signalHandlers.emplace_back(handler, "source_audio_activate",
+		[](void *data, calldata_t *params) {
+			auto *dock = static_cast<AudioMixerDock *>(data);
+			obs_source_t *source = static_cast<obs_source_t *>(calldata_ptr(params, "source"));
+
+			QMetaObject::invokeMethod(dock, "ActivateAudioSource",
+				Qt::QueuedConnection,
+				Q_ARG(OBSSource, OBSSource(source)));
+		}, this);
+
+	// Audio specifically deactivated
+	signalHandlers.emplace_back(handler, "source_audio_deactivate",
+		[](void *data, calldata_t *params) {
+			auto *dock = static_cast<AudioMixerDock *>(data);
+			obs_source_t *source = static_cast<obs_source_t *>(calldata_ptr(params, "source"));
+
+			QMetaObject::invokeMethod(dock, "DeactivateAudioSource",
+				Qt::QueuedConnection,
+				Q_ARG(OBSSource, OBSSource(source)));
+		}, this);
+
+	// Source renamed
+	signalHandlers.emplace_back(handler, "source_rename",
+		[](void *data, calldata_t *params) {
+			auto *dock = static_cast<AudioMixerDock *>(data);
+			const char *newName = calldata_string(params, "new_name");
+			const char *prevName = calldata_string(params, "prev_name");
+
+			QMetaObject::invokeMethod(dock, "OnSourceRenamed",
+				Qt::QueuedConnection,
+				Q_ARG(QString, QString::fromUtf8(newName)),
+				Q_ARG(QString, QString::fromUtf8(prevName)));
+		}, this);
+}
+
+void AudioMixerDock::DisconnectSignalHandlers()
+{
+	signalHandlers.clear();
+}
+
+void AudioMixerDock::EnumerateAudioSources()
+{
+	auto enumCallback = [](void *data, obs_source_t *source) -> bool {
+		auto *dock = static_cast<AudioMixerDock *>(data);
+
+		uint32_t flags = obs_source_get_output_flags(source);
+		if (!(flags & OBS_SOURCE_AUDIO))
+			return true;
+
+		if (!obs_source_active(source))
+			return true;
+
+		dock->ActivateAudioSource(OBSSource(source));
+		return true;
+	};
+
+	obs_enum_sources(enumCallback, this);
+}
+
+void AudioMixerDock::ClearMixerItems()
+{
+	for (MixerItem *item : mixerItems) {
+		mixerLayout->removeWidget(item);
+		delete item;
+	}
+	mixerItems.clear();
+}
+
+void AudioMixerDock::RefreshMixerLayout()
+{
+	// Remove all items from layout
+	for (MixerItem *item : mixerItems) {
+		mixerLayout->removeWidget(item);
+	}
+
+	// Sort by saved order
+	std::vector<std::string> order = orderManager->GetOrder();
+
+	std::sort(mixerItems.begin(), mixerItems.end(),
+		[&order](MixerItem *a, MixerItem *b) {
+			std::string uuidA = a->GetSourceUUID().toStdString();
+			std::string uuidB = b->GetSourceUUID().toStdString();
+
+			auto itA = std::find(order.begin(), order.end(), uuidA);
+			auto itB = std::find(order.begin(), order.end(), uuidB);
+
+			// Items not in order go to end, sorted alphabetically
+			if (itA == order.end() && itB == order.end()) {
+				return a->GetSourceName() < b->GetSourceName();
+			}
+			if (itA == order.end()) return false;
+			if (itB == order.end()) return true;
+
+			return itA < itB;
+		});
+
+	// Re-add in sorted order
+	for (MixerItem *item : mixerItems) {
+		mixerLayout->addWidget(item);
+	}
+
+	// Update empty state
+	emptyLabel->setVisible(mixerItems.empty());
+
+	UpdateButtonStates();
+}
+
+void AudioMixerDock::UpdateButtonStates()
+{
+	for (size_t i = 0; i < mixerItems.size(); i++) {
+		mixerItems[i]->UpdateButtons(i > 0, i < mixerItems.size() - 1);
+	}
+}
+
+MixerItem *AudioMixerDock::FindMixerItem(obs_source_t *source)
+{
+	for (MixerItem *item : mixerItems) {
+		if (item->GetSource() == source)
+			return item;
+	}
+	return nullptr;
+}
+
+int AudioMixerDock::GetItemIndex(MixerItem *item)
+{
+	for (size_t i = 0; i < mixerItems.size(); i++) {
+		if (mixerItems[i] == item)
+			return static_cast<int>(i);
+	}
+	return -1;
+}
+
+void AudioMixerDock::ActivateAudioSource(OBSSource source)
+{
+	// Check if already tracked
+	if (FindMixerItem(source))
+		return;
+
+	// Verify it's actually active and has audio
+	if (!obs_source_active(source))
+		return;
+
+	// Create mixer item
+	MixerItem *item = new MixerItem(source, vertical, scrollWidget);
+
+	// Connect reorder signals
+	connect(item, &MixerItem::MoveUpRequested, this, &AudioMixerDock::MoveSourceUp);
+	connect(item, &MixerItem::MoveDownRequested, this, &AudioMixerDock::MoveSourceDown);
+
+	// Add to list and order manager
+	mixerItems.push_back(item);
+	orderManager->AddSource(item->GetSourceUUID().toStdString());
+
+	// Refresh layout
+	RefreshMixerLayout();
+}
+
+void AudioMixerDock::DeactivateAudioSource(OBSSource source)
+{
+	MixerItem *item = FindMixerItem(source);
+	if (!item)
+		return;
+
+	// Remove from list
+	auto it = std::find(mixerItems.begin(), mixerItems.end(), item);
+	if (it != mixerItems.end()) {
+		mixerItems.erase(it);
+	}
+
+	// Remove from layout and delete
+	mixerLayout->removeWidget(item);
+	delete item;
+
+	// Update empty state and buttons
+	emptyLabel->setVisible(mixerItems.empty());
+	UpdateButtonStates();
+}
+
+void AudioMixerDock::OnSourceRenamed(QString newName, QString prevName)
+{
+	Q_UNUSED(newName);
+	Q_UNUSED(prevName);
+
+	// Just refresh the display - names are fetched dynamically
+	for (MixerItem *item : mixerItems) {
+		item->RefreshName();
+	}
+}
+
+void AudioMixerDock::MoveSourceUp(MixerItem *item)
+{
+	int index = GetItemIndex(item);
+	if (index <= 0)
+		return;
+
+	// Swap in our list
+	std::swap(mixerItems[index], mixerItems[index - 1]);
+
+	// Update order manager
+	std::vector<std::string> newOrder;
+	for (MixerItem *mi : mixerItems) {
+		newOrder.push_back(mi->GetSourceUUID().toStdString());
+	}
+	orderManager->SetOrder(newOrder);
+
+	// Refresh layout
+	RefreshMixerLayout();
+}
+
+void AudioMixerDock::MoveSourceDown(MixerItem *item)
+{
+	int index = GetItemIndex(item);
+	if (index < 0 || index >= static_cast<int>(mixerItems.size()) - 1)
+		return;
+
+	// Swap in our list
+	std::swap(mixerItems[index], mixerItems[index + 1]);
+
+	// Update order manager
+	std::vector<std::string> newOrder;
+	for (MixerItem *mi : mixerItems) {
+		newOrder.push_back(mi->GetSourceUUID().toStdString());
+	}
+	orderManager->SetOrder(newOrder);
+
+	// Refresh layout
+	RefreshMixerLayout();
+}
+
+void AudioMixerDock::OnSceneCollectionChanged()
+{
+	// Save current order before switching
+	orderManager->Save();
+
+	// Clear current items
+	ClearMixerItems();
+
+	// Update collection name
+	char *collection = obs_frontend_get_current_scene_collection();
+	if (collection) {
+		orderManager->SetCurrentCollection(collection);
+		bfree(collection);
+	}
+
+	// Re-enumerate sources
+	EnumerateAudioSources();
+}
+
+void AudioMixerDock::OnFinishedLoading()
+{
+	EnumerateAudioSources();
+}
+
+void AudioMixerDock::SaveOrder()
+{
+	orderManager->Save();
+}
+
+void AudioMixerDock::OnExit()
+{
+	// Save order first
+	orderManager->Save();
+
+	// Disconnect signal handlers to prevent callbacks during cleanup
+	DisconnectSignalHandlers();
+
+	// Clear all mixer items while sources are still valid
+	ClearMixerItems();
+}
