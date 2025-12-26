@@ -1,1 +1,2 @@
-.run-format.zsh
+#!/usr/bin/env zsh
+source "${0:A:h}/.run-format.zsh"
