@@ -1,0 +1,63 @@
+# OBS Plugin .gitignore
+
+# Reference files (OBS installation for development)
+reference-files/
+
+# Build outputs
+build/
+out/
+release/
+debug/
+x64/
+x86/
+Win32/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vcxproj.user
+*.pdb
+*.ilk
+*.obj
+*.log
+*.tlog
+*.idb
+*.aps
+
+# Compiled binaries
+*.dll
+*.exe
+*.lib
+*.exp
+*.so
+*.dylib
+
+# Object files
+*.o
+*.obj
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Package managers
+node_modules/
+
+reference-files/
