@@ -26,14 +26,29 @@ MixerItem::MixerItem(OBSSource source_, bool vertical_, QWidget *parent)
 
 MixerItem::~MixerItem()
 {
+	Cleanup();
+}
+
+void MixerItem::Cleanup(bool isShutdown)
+{
+	if (!obs_fader)
+		return; // Already cleaned up
+
 	DisconnectSignals();
 
-	// Detach from source before destroying to avoid crash on shutdown
-	obs_fader_detach_source(obs_fader);
-	obs_volmeter_detach_source(obs_volmeter);
+	// During shutdown, don't touch fader/volmeter - sources are already
+	// destroyed and calling detach/destroy will crash. Just null out
+	// our pointers and let the process cleanup handle it.
+	if (!isShutdown) {
+		obs_fader_detach_source(obs_fader);
+		obs_volmeter_detach_source(obs_volmeter);
+		obs_fader_destroy(obs_fader);
+		obs_volmeter_destroy(obs_volmeter);
+	}
 
-	obs_fader_destroy(obs_fader);
-	obs_volmeter_destroy(obs_volmeter);
+	obs_fader = nullptr;
+	obs_volmeter = nullptr;
+	source = nullptr;
 }
 
 QString MixerItem::GetSourceUUID() const

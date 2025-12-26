@@ -157,6 +157,7 @@ void AudioMixerDock::ClearMixerItems()
 {
 	for (MixerItem *item : mixerItems) {
 		mixerLayout->removeWidget(item);
+		item->Cleanup(shuttingDown);
 		delete item;
 	}
 	mixerItems.clear();
@@ -357,9 +358,13 @@ void AudioMixerDock::OnExit()
 	// Save order first
 	orderManager->Save();
 
+	// Mark as shutting down - this prevents MixerItem from trying to
+	// detach/destroy faders which crashes when sources are already gone
+	shuttingDown = true;
+
 	// Disconnect signal handlers to prevent callbacks during cleanup
 	DisconnectSignalHandlers();
 
-	// Clear all mixer items while sources are still valid
+	// Clear all mixer items - with shuttingDown=true, they won't touch OBS objects
 	ClearMixerItems();
 }

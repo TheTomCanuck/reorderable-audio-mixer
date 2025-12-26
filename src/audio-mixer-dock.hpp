@@ -59,4 +59,5 @@ private:
 
 	OrderManager *orderManager = nullptr;
 	bool vertical = false;
+	bool shuttingDown = false;
 };

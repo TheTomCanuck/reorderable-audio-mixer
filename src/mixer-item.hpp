@@ -28,6 +28,7 @@ public:
 	void SetVertical(bool vertical);
 	void UpdateButtons(bool canMoveUp, bool canMoveDown);
 	void RefreshName();
+	void Cleanup(bool isShutdown = false);
 
 signals:
 	void MoveUpRequested(MixerItem *item);
