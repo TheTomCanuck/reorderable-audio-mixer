@@ -6,6 +6,7 @@
 #include <obs-frontend-api.h>
 
 #include <QScrollBar>
+#include <QCursor>
 
 AudioMixerDock::AudioMixerDock(QWidget *parent)
 	: QFrame(parent),
@@ -59,6 +60,10 @@ void AudioMixerDock::SetupUI()
 	mainLayout->addWidget(scrollArea);
 
 	setLayout(mainLayout);
+
+	// Enable context menu
+	setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(this, &QWidget::customContextMenuRequested, this, &AudioMixerDock::ShowContextMenu);
 }
 
 void AudioMixerDock::ConnectSignalHandlers()
@@ -144,6 +149,10 @@ void AudioMixerDock::EnumerateAudioSources()
 			return true;
 
 		if (!obs_source_active(source))
+			return true;
+
+		// Skip sources hidden in mixer
+		if (SourceMixerHidden(source))
 			return true;
 
 		dock->ActivateAudioSource(OBSSource(source));
@@ -237,12 +246,24 @@ void AudioMixerDock::ActivateAudioSource(OBSSource source)
 	if (!obs_source_active(source))
 		return;
 
+	// Skip sources hidden in mixer
+	if (SourceMixerHidden(source))
+		return;
+
 	// Create mixer item
 	MixerItem *item = new MixerItem(source, vertical, scrollWidget);
 
-	// Connect reorder signals
+	// Connect signals
 	connect(item, &MixerItem::MoveUpRequested, this, &AudioMixerDock::MoveSourceUp);
 	connect(item, &MixerItem::MoveDownRequested, this, &AudioMixerDock::MoveSourceDown);
+	connect(item, &MixerItem::HideRequested, this, [this](MixerItem *item) {
+		// Capture the source before any cleanup happens
+		OBSSource source = OBSSource(item->GetSource());
+		// Defer the hide operation to ensure all signal handlers complete first
+		QMetaObject::invokeMethod(this, [this, source]() {
+			HideSource(source);
+		}, Qt::QueuedConnection);
+	});
 
 	// Add to list and order manager
 	mixerItems.push_back(item);
@@ -264,9 +285,14 @@ void AudioMixerDock::DeactivateAudioSource(OBSSource source)
 		mixerItems.erase(it);
 	}
 
-	// Remove from layout and delete
+	// Remove from layout and cleanup
+	// Call Cleanup() immediately to detach from OBS objects while they're still valid
+	// Then use deleteLater() because this may be called from a signal handler
+	// while the item's context menu is still on the stack
 	mixerLayout->removeWidget(item);
-	delete item;
+	item->Cleanup();
+	item->hide();
+	item->deleteLater();
 
 	// Update empty state and buttons
 	emptyLabel->setVisible(mixerItems.empty());
@@ -367,4 +393,52 @@ void AudioMixerDock::OnExit()
 
 	// Clear all mixer items - with shuttingDown=true, they won't touch OBS objects
 	ClearMixerItems();
+}
+
+void AudioMixerDock::HideSource(OBSSource source)
+{
+	if (!SourceMixerHidden(source)) {
+		SetSourceMixerHidden(source, true);
+		DeactivateAudioSource(source);
+	}
+}
+
+void AudioMixerDock::UnhideAllSources()
+{
+	auto unhideCallback = [](void *data, obs_source_t *source) -> bool {
+		auto *dock = static_cast<AudioMixerDock *>(data);
+
+		// Only process audio sources
+		uint32_t flags = obs_source_get_output_flags(source);
+		if (!(flags & OBS_SOURCE_AUDIO))
+			return true;
+
+		// Only unhide if currently hidden
+		if (!SourceMixerHidden(source))
+			return true;
+
+		// Unhide
+		SetSourceMixerHidden(source, false);
+
+		// Re-activate if source is active
+		if (obs_source_active(source)) {
+			dock->ActivateAudioSource(OBSSource(source));
+		}
+
+		return true;
+	};
+
+	obs_enum_sources(unhideCallback, this);
+}
+
+void AudioMixerDock::ShowContextMenu(const QPoint &pos)
+{
+	Q_UNUSED(pos);
+
+	QMenu menu(this);
+
+	QAction *unhideAllAction = menu.addAction(obs_module_text("BetterAudioMixer.UnhideAll"));
+	connect(unhideAllAction, &QAction::triggered, this, &AudioMixerDock::UnhideAllSources);
+
+	menu.exec(QCursor::pos());
 }

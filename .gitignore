@@ -3,6 +3,9 @@
 # Reference files (OBS installation for development)
 reference-files/
 
+# Local dev scripts (not needed for CI)
+*.bat
+
 # Logs
 logs/
 crash-logs/
@@ -17,16 +20,18 @@ x64/
 x86/
 Win32/
 
-# Dependencies (created by setup.bat)
+# Dependencies (downloaded by setup.bat)
 .deps/
-cmake/
 
-# CMake
+# CMake build cache (but not the cmake/ folder itself)
+cmake/.CMakeBuildNumber
+
+# CMake generated files
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
-*.cmake
+*_autogen/
 
 # Visual Studio
 .vs/

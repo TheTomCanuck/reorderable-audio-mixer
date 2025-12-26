@@ -34,6 +34,7 @@ public:
 signals:
 	void MoveUpRequested(MixerItem *item);
 	void MoveDownRequested(MixerItem *item);
+	void HideRequested(MixerItem *item);
 
 private slots:
 	void OnMoveUp();
@@ -41,6 +42,7 @@ private slots:
 	void OnMuteToggled(bool checked);
 	void OnSliderChanged(int value);
 	void OnConfigClicked();
+	void OnHideClicked();
 	void OnFiltersClicked();
 	void OnPropertiesClicked();
 	void OnAdvancedAudioClicked();

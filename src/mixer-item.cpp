@@ -46,8 +46,9 @@ void MixerItem::Cleanup(bool isShutdown)
 	if (!isShutdown) {
 		obs_fader_detach_source(obs_fader);
 		obs_volmeter_detach_source(obs_volmeter);
-		obs_fader_destroy(obs_fader);
-		obs_volmeter_destroy(obs_volmeter);
+		// OBSFader and OBSVolMeter are RAII wrappers (OBSPtr) that auto-destroy
+		// when assigned nullptr - do NOT manually call obs_fader_destroy/obs_volmeter_destroy
+		// as that causes a double-free crash!
 	}
 
 	obs_fader = nullptr;
@@ -286,6 +287,11 @@ void MixerItem::OnConfigClicked()
 {
 	QMenu menu(this);
 
+	QAction *hideAction = menu.addAction(obs_module_text("BetterAudioMixer.Hide"));
+	connect(hideAction, &QAction::triggered, this, &MixerItem::OnHideClicked);
+
+	menu.addSeparator();
+
 	QAction *filtersAction = menu.addAction(obs_module_text("BetterAudioMixer.Filters"));
 	connect(filtersAction, &QAction::triggered, this, &MixerItem::OnFiltersClicked);
 
@@ -298,6 +304,16 @@ void MixerItem::OnConfigClicked()
 	connect(advAudioAction, &QAction::triggered, this, &MixerItem::OnAdvancedAudioClicked);
 
 	menu.exec(QCursor::pos());
+}
+
+void MixerItem::OnHideClicked()
+{
+	// Defer the hide operation until after the menu has closed
+	// and the stack is fully unwound. This prevents crashes from
+	// destroying OBS objects while still inside OnConfigClicked().
+	QMetaObject::invokeMethod(this, [this]() {
+		emit HideRequested(this);
+	}, Qt::QueuedConnection);
 }
 
 void MixerItem::OnFiltersClicked()

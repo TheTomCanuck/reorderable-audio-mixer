@@ -10,6 +10,25 @@
 class VolumeMeter : public QWidget {
 	Q_OBJECT
 
+	Q_PROPERTY(QColor backgroundNominalColor READ getBackgroundNominalColor
+		WRITE setBackgroundNominalColor DESIGNABLE true)
+	Q_PROPERTY(QColor backgroundWarningColor READ getBackgroundWarningColor
+		WRITE setBackgroundWarningColor DESIGNABLE true)
+	Q_PROPERTY(QColor backgroundErrorColor READ getBackgroundErrorColor
+		WRITE setBackgroundErrorColor DESIGNABLE true)
+	Q_PROPERTY(QColor foregroundNominalColor READ getForegroundNominalColor
+		WRITE setForegroundNominalColor DESIGNABLE true)
+	Q_PROPERTY(QColor foregroundWarningColor READ getForegroundWarningColor
+		WRITE setForegroundWarningColor DESIGNABLE true)
+	Q_PROPERTY(QColor foregroundErrorColor READ getForegroundErrorColor
+		WRITE setForegroundErrorColor DESIGNABLE true)
+	Q_PROPERTY(QColor magnitudeColor READ getMagnitudeColor
+		WRITE setMagnitudeColor DESIGNABLE true)
+	Q_PROPERTY(QColor majorTickColor READ getMajorTickColor
+		WRITE setMajorTickColor DESIGNABLE true)
+	Q_PROPERTY(QColor minorTickColor READ getMinorTickColor
+		WRITE setMinorTickColor DESIGNABLE true)
+
 public:
 	explicit VolumeMeter(QWidget *parent = nullptr);
 	~VolumeMeter();
@@ -19,6 +38,26 @@ public:
 		       const float inputPeak[MAX_AUDIO_CHANNELS]);
 
 	bool muted = false;
+
+	// Property getters/setters for theme support
+	QColor getBackgroundNominalColor() const { return backgroundNominalColor; }
+	void setBackgroundNominalColor(QColor c) { backgroundNominalColor = c; }
+	QColor getBackgroundWarningColor() const { return backgroundWarningColor; }
+	void setBackgroundWarningColor(QColor c) { backgroundWarningColor = c; }
+	QColor getBackgroundErrorColor() const { return backgroundErrorColor; }
+	void setBackgroundErrorColor(QColor c) { backgroundErrorColor = c; }
+	QColor getForegroundNominalColor() const { return foregroundNominalColor; }
+	void setForegroundNominalColor(QColor c) { foregroundNominalColor = c; }
+	QColor getForegroundWarningColor() const { return foregroundWarningColor; }
+	void setForegroundWarningColor(QColor c) { foregroundWarningColor = c; }
+	QColor getForegroundErrorColor() const { return foregroundErrorColor; }
+	void setForegroundErrorColor(QColor c) { foregroundErrorColor = c; }
+	QColor getMagnitudeColor() const { return magnitudeColor; }
+	void setMagnitudeColor(QColor c) { magnitudeColor = c; }
+	QColor getMajorTickColor() const { return majorTickColor; }
+	void setMajorTickColor(QColor c) { majorTickColor = c; }
+	QColor getMinorTickColor() const { return minorTickColor; }
+	void setMinorTickColor(QColor c) { minorTickColor = c; }
 
 protected:
 	void paintEvent(QPaintEvent *event) override;

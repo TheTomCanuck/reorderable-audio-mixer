@@ -7,11 +7,25 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QLabel>
+#include <QMenu>
 
 #include <vector>
 
 class MixerItem;
 class OrderManager;
+
+// Helper functions for mixer hidden state (uses OBS's standard private settings)
+static inline bool SourceMixerHidden(obs_source_t *source)
+{
+	OBSDataAutoRelease priv_settings = obs_source_get_private_settings(source);
+	return obs_data_get_bool(priv_settings, "mixer_hidden");
+}
+
+static inline void SetSourceMixerHidden(obs_source_t *source, bool hidden)
+{
+	OBSDataAutoRelease priv_settings = obs_source_get_private_settings(source);
+	obs_data_set_bool(priv_settings, "mixer_hidden", hidden);
+}
 
 class AudioMixerDock : public QFrame {
 	Q_OBJECT
@@ -34,6 +48,12 @@ public slots:
 
 	void MoveSourceUp(MixerItem *item);
 	void MoveSourceDown(MixerItem *item);
+
+	void HideSource(OBSSource source);
+	void UnhideAllSources();
+
+private slots:
+	void ShowContextMenu(const QPoint &pos);
 
 private:
 	void SetupUI();
