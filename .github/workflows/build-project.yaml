@@ -67,82 +67,13 @@ jobs:
             echo "pluginName=${plugin_name}" >> $GITHUB_OUTPUT
           fi
 
-  macos-build:
-    name: Build for macOS
-    runs-on: macos-15
-    needs: check-event
-    defaults:
-      run:
-        shell: zsh --no-rcs --errexit --pipefail {0}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set Up Environment
-        id: setup
-        run: |
-          : Set Up Environment
-          if (( ${+RUNNER_DEBUG} )) setopt XTRACE
-
-          print '::group::Enable Xcode 16.1'
-          sudo xcode-select --switch /Applications/Xcode_16.1.0.app/Contents/Developer
-          print '::endgroup::'
-
-          print '::group::Clean Homebrew Environment'
-          local -a unwanted_formulas=()
-          local -a remove_formulas=()
-          for formula (${unwanted_formulas}) {
-            if [[ -d ${HOMEBREW_PREFIX}/Cellar/${formula} ]] remove_formulas+=(${formula})
-          }
-
-          if (( #remove_formulas )) brew uninstall --ignore-dependencies ${remove_formulas}
-          print '::endgroup::'
-
-          local product_name
-          local product_version
-          read -r product_name product_version <<< \
-            "$(jq -r '. | {name, version} | join(" ")' buildspec.json)"
-
-          print "pluginName=${product_name}" >> $GITHUB_OUTPUT
-          print "pluginVersion=${product_version}" >> $GITHUB_OUTPUT
-
-      - uses: actions/cache/restore@v4
-        id: ccache-cache
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ${{ runner.os }}-ccache-${{ needs.check-event.outputs.config }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-
-
-      - name: Build Plugin
-        uses: ./.github/actions/build-plugin
-        with:
-          target: macos-universal
-          config: ${{ needs.check-event.outputs.config }}
-          codesign: false
-
-      - name: Package Plugin
-        uses: ./.github/actions/package-plugin
-        with:
-          target: macos-universal
-          config: ${{ needs.check-event.outputs.config }}
-          package: ${{ fromJSON(needs.check-event.outputs.package) }}
-          codesign: false
-          notarize: false
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-macos-universal-${{ needs.check-event.outputs.commitHash }}
-          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-macos-universal.*
-
-      - uses: actions/cache/save@v4
-        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ${{ runner.os }}-ccache-${{ needs.check-event.outputs.config }}
+  # macOS build disabled - OBS 32.0.0 has upstream CMake issue with libobs-metal
+  # Re-enable when OBS fixes the Metal renderer build
+  # macos-build:
+  #   name: Build for macOS
+  #   runs-on: macos-15
+  #   needs: check-event
+  #   ...
 
   ubuntu-build:
     name: Build for Ubuntu

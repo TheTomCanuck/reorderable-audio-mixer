@@ -71,7 +71,6 @@ jobs:
 
           variants=(
             'windows-x64;zip'
-            'macos-universal;tar.xz'
             'ubuntu-24.04-x86_64;tar.xz|deb'
           )
 
