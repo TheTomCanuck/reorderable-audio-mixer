@@ -27,18 +27,20 @@ public:
 	QString GetSourceName() const;
 
 	void SetVertical(bool vertical);
-	void UpdateButtons(bool canMoveUp, bool canMoveDown);
 	void RefreshName();
 	void Cleanup(bool isShutdown = false);
 
+	void SetSelected(bool selected);
+	bool IsSelected() const { return selected; }
+
 signals:
-	void MoveUpRequested(MixerItem *item);
-	void MoveDownRequested(MixerItem *item);
 	void HideRequested(MixerItem *item);
+	void Selected(MixerItem *item);
+
+protected:
+	void mousePressEvent(QMouseEvent *event) override;
 
 private slots:
-	void OnMoveUp();
-	void OnMoveDown();
 	void OnMuteToggled(bool checked);
 	void OnSliderChanged(int value);
 	void OnConfigClicked();
@@ -55,6 +57,7 @@ private:
 	void SetupSignals();
 	void DisconnectSignals();
 	void UpdateVolumeLabel();
+	void UpdateSelectionStyle();
 
 	static void OBSVolumeChanged(void *data, float db);
 	static void OBSVolumeMuted(void *data, calldata_t *calldata);
@@ -73,8 +76,6 @@ private:
 	VolumeMeter *volMeter = nullptr;
 	QSlider *slider = nullptr;
 	QCheckBox *muteCheckbox = nullptr;
-	QPushButton *upButton = nullptr;
-	QPushButton *downButton = nullptr;
 	QPushButton *configButton = nullptr;
 
 	// OBS handles
@@ -82,6 +83,7 @@ private:
 	OBSVolMeter obs_volmeter;
 
 	bool vertical = false;
+	bool selected = false;
 
 	static constexpr float FADER_PRECISION = 4096.0f;
 };

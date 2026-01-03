@@ -7,6 +7,7 @@
 
 #include <QScrollBar>
 #include <QCursor>
+#include <QStyle>
 
 AudioMixerDock::AudioMixerDock(QWidget *parent)
 	: QFrame(parent),
@@ -57,7 +58,31 @@ void AudioMixerDock::SetupUI()
 	mixerLayout->addWidget(emptyLabel);
 
 	scrollArea->setWidget(scrollWidget);
-	mainLayout->addWidget(scrollArea);
+	mainLayout->addWidget(scrollArea, 1);
+
+	// Toolbar at bottom
+	toolbar = new QToolBar(this);
+	toolbar->setObjectName(QStringLiteral("mixerToolbar"));
+	toolbar->setIconSize(QSize(16, 16));
+	toolbar->setFloatable(false);
+
+	upAction = toolbar->addAction(
+		QIcon(":/res/images/up.svg"),
+		obs_module_text("BetterAudioMixer.MoveUp"),
+		this, &AudioMixerDock::OnMoveUpClicked);
+	toolbar->widgetForAction(upAction)->setProperty("themeID", QVariant(QString::fromUtf8("upArrowIconSmall")));
+	toolbar->widgetForAction(upAction)->setProperty("class", "icon-up");
+	upAction->setEnabled(false);
+
+	downAction = toolbar->addAction(
+		QIcon(":/res/images/down.svg"),
+		obs_module_text("BetterAudioMixer.MoveDown"),
+		this, &AudioMixerDock::OnMoveDownClicked);
+	toolbar->widgetForAction(downAction)->setProperty("themeID", QVariant(QString::fromUtf8("downArrowIconSmall")));
+	toolbar->widgetForAction(downAction)->setProperty("class", "icon-down");
+	downAction->setEnabled(false);
+
+	mainLayout->addWidget(toolbar);
 
 	setLayout(mainLayout);
 
@@ -164,6 +189,7 @@ void AudioMixerDock::EnumerateAudioSources()
 
 void AudioMixerDock::ClearMixerItems()
 {
+	selectedItem = nullptr;
 	for (MixerItem *item : mixerItems) {
 		mixerLayout->removeWidget(item);
 		item->Cleanup(shuttingDown);
@@ -208,14 +234,100 @@ void AudioMixerDock::RefreshMixerLayout()
 	// Update empty state
 	emptyLabel->setVisible(mixerItems.empty());
 
-	UpdateButtonStates();
+	UpdateToolbarButtons();
 }
 
-void AudioMixerDock::UpdateButtonStates()
+void AudioMixerDock::UpdateToolbarButtons()
 {
-	for (size_t i = 0; i < mixerItems.size(); i++) {
-		mixerItems[i]->UpdateButtons(i > 0, i < mixerItems.size() - 1);
+	if (!selectedItem) {
+		upAction->setEnabled(false);
+		downAction->setEnabled(false);
+	} else {
+		int index = GetItemIndex(selectedItem);
+		upAction->setEnabled(index > 0);
+		downAction->setEnabled(index >= 0 && index < static_cast<int>(mixerItems.size()) - 1);
 	}
+
+	// Refresh toolbar styling after enabling/disabling actions
+	for (QAction *action : toolbar->actions()) {
+		QWidget *widget = toolbar->widgetForAction(action);
+		if (widget) {
+			widget->style()->unpolish(widget);
+			widget->style()->polish(widget);
+		}
+	}
+}
+
+void AudioMixerDock::SelectItem(MixerItem *item)
+{
+	if (selectedItem == item)
+		return;
+
+	// Deselect previous
+	if (selectedItem) {
+		selectedItem->SetSelected(false);
+	}
+
+	// Select new
+	selectedItem = item;
+	if (selectedItem) {
+		selectedItem->SetSelected(true);
+	}
+
+	UpdateToolbarButtons();
+}
+
+void AudioMixerDock::OnItemSelected(MixerItem *item)
+{
+	SelectItem(item);
+}
+
+void AudioMixerDock::OnMoveUpClicked()
+{
+	if (!selectedItem)
+		return;
+
+	int index = GetItemIndex(selectedItem);
+	if (index <= 0)
+		return;
+
+	// Swap in our list
+	std::swap(mixerItems[index], mixerItems[index - 1]);
+
+	// Update order manager
+	std::vector<std::string> newOrder;
+	for (MixerItem *mi : mixerItems) {
+		newOrder.push_back(mi->GetSourceUUID().toStdString());
+	}
+	orderManager->SetOrder(newOrder);
+	orderManager->Save();
+
+	// Refresh layout
+	RefreshMixerLayout();
+}
+
+void AudioMixerDock::OnMoveDownClicked()
+{
+	if (!selectedItem)
+		return;
+
+	int index = GetItemIndex(selectedItem);
+	if (index < 0 || index >= static_cast<int>(mixerItems.size()) - 1)
+		return;
+
+	// Swap in our list
+	std::swap(mixerItems[index], mixerItems[index + 1]);
+
+	// Update order manager
+	std::vector<std::string> newOrder;
+	for (MixerItem *mi : mixerItems) {
+		newOrder.push_back(mi->GetSourceUUID().toStdString());
+	}
+	orderManager->SetOrder(newOrder);
+	orderManager->Save();
+
+	// Refresh layout
+	RefreshMixerLayout();
 }
 
 MixerItem *AudioMixerDock::FindMixerItem(obs_source_t *source)
@@ -254,8 +366,7 @@ void AudioMixerDock::ActivateAudioSource(OBSSource source)
 	MixerItem *item = new MixerItem(source, vertical, scrollWidget);
 
 	// Connect signals
-	connect(item, &MixerItem::MoveUpRequested, this, &AudioMixerDock::MoveSourceUp);
-	connect(item, &MixerItem::MoveDownRequested, this, &AudioMixerDock::MoveSourceDown);
+	connect(item, &MixerItem::Selected, this, &AudioMixerDock::OnItemSelected);
 	connect(item, &MixerItem::HideRequested, this, [this](MixerItem *item) {
 		// Capture the source before any cleanup happens
 		OBSSource source = OBSSource(item->GetSource());
@@ -279,6 +390,11 @@ void AudioMixerDock::DeactivateAudioSource(OBSSource source)
 	if (!item)
 		return;
 
+	// Clear selection if this item was selected
+	if (selectedItem == item) {
+		selectedItem = nullptr;
+	}
+
 	// Remove from list
 	auto it = std::find(mixerItems.begin(), mixerItems.end(), item);
 	if (it != mixerItems.end()) {
@@ -296,7 +412,7 @@ void AudioMixerDock::DeactivateAudioSource(OBSSource source)
 
 	// Update empty state and buttons
 	emptyLabel->setVisible(mixerItems.empty());
-	UpdateButtonStates();
+	UpdateToolbarButtons();
 }
 
 void AudioMixerDock::OnSourceRenamed(QString newName, QString prevName)
@@ -308,48 +424,6 @@ void AudioMixerDock::OnSourceRenamed(QString newName, QString prevName)
 	for (MixerItem *item : mixerItems) {
 		item->RefreshName();
 	}
-}
-
-void AudioMixerDock::MoveSourceUp(MixerItem *item)
-{
-	int index = GetItemIndex(item);
-	if (index <= 0)
-		return;
-
-	// Swap in our list
-	std::swap(mixerItems[index], mixerItems[index - 1]);
-
-	// Update order manager
-	std::vector<std::string> newOrder;
-	for (MixerItem *mi : mixerItems) {
-		newOrder.push_back(mi->GetSourceUUID().toStdString());
-	}
-	orderManager->SetOrder(newOrder);
-	orderManager->Save();
-
-	// Refresh layout
-	RefreshMixerLayout();
-}
-
-void AudioMixerDock::MoveSourceDown(MixerItem *item)
-{
-	int index = GetItemIndex(item);
-	if (index < 0 || index >= static_cast<int>(mixerItems.size()) - 1)
-		return;
-
-	// Swap in our list
-	std::swap(mixerItems[index], mixerItems[index + 1]);
-
-	// Update order manager
-	std::vector<std::string> newOrder;
-	for (MixerItem *mi : mixerItems) {
-		newOrder.push_back(mi->GetSourceUUID().toStdString());
-	}
-	orderManager->SetOrder(newOrder);
-	orderManager->Save();
-
-	// Refresh layout
-	RefreshMixerLayout();
 }
 
 void AudioMixerDock::OnSceneCollectionChanged()

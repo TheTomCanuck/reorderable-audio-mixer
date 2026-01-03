@@ -8,6 +8,8 @@
 #include <QScrollArea>
 #include <QLabel>
 #include <QMenu>
+#include <QToolBar>
+#include <QAction>
 
 #include <vector>
 
@@ -46,14 +48,14 @@ public slots:
 	void DeactivateAudioSource(OBSSource source);
 	void OnSourceRenamed(QString newName, QString prevName);
 
-	void MoveSourceUp(MixerItem *item);
-	void MoveSourceDown(MixerItem *item);
-
 	void HideSource(OBSSource source);
 	void UnhideAllSources();
 
 private slots:
 	void ShowContextMenu(const QPoint &pos);
+	void OnItemSelected(MixerItem *item);
+	void OnMoveUpClicked();
+	void OnMoveDownClicked();
 
 private:
 	void SetupUI();
@@ -62,7 +64,8 @@ private:
 	void EnumerateAudioSources();
 	void ClearMixerItems();
 	void RefreshMixerLayout();
-	void UpdateButtonStates();
+	void UpdateToolbarButtons();
+	void SelectItem(MixerItem *item);
 
 	MixerItem *FindMixerItem(obs_source_t *source);
 	int GetItemIndex(MixerItem *item);
@@ -74,10 +77,16 @@ private:
 	QBoxLayout *mixerLayout = nullptr;
 	QLabel *emptyLabel = nullptr;
 
+	// Toolbar
+	QToolBar *toolbar = nullptr;
+	QAction *upAction = nullptr;
+	QAction *downAction = nullptr;
+
 	std::vector<MixerItem *> mixerItems;
 	std::vector<OBSSignal> signalHandlers;
 
 	OrderManager *orderManager = nullptr;
+	MixerItem *selectedItem = nullptr;
 	bool vertical = false;
 	bool shuttingDown = false;
 };

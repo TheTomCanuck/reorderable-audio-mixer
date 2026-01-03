@@ -7,6 +7,7 @@
 #include <QCursor>
 #include <QAction>
 #include <QMainWindow>
+#include <QMouseEvent>
 #include <cmath>
 
 MixerItem::MixerItem(OBSSource source_, bool vertical_, QWidget *parent)
@@ -77,30 +78,13 @@ void MixerItem::SetupUI()
 	mainLayout->setContentsMargins(6, 6, 6, 6);
 	mainLayout->setSpacing(2);
 
-	// Row 1: Name and reorder buttons
-	// [name                    ] [^][v]
+	// Row 1: Name
 	QHBoxLayout *nameRow = new QHBoxLayout();
 	nameRow->setSpacing(4);
 
 	nameLabel = new QLabel(GetSourceName());
 	nameLabel->setStyleSheet("font-weight: bold;");
 	nameRow->addWidget(nameLabel, 1);
-
-	upButton = new QPushButton();
-	upButton->setProperty("class", "icon-up");
-	upButton->setFixedSize(16, 16);
-	upButton->setFlat(true);
-	upButton->setToolTip(obs_module_text("BetterAudioMixer.MoveUp"));
-	connect(upButton, &QPushButton::clicked, this, &MixerItem::OnMoveUp);
-	nameRow->addWidget(upButton);
-
-	downButton = new QPushButton();
-	downButton->setProperty("class", "icon-down");
-	downButton->setFixedSize(16, 16);
-	downButton->setFlat(true);
-	downButton->setToolTip(obs_module_text("BetterAudioMixer.MoveDown"));
-	connect(downButton, &QPushButton::clicked, this, &MixerItem::OnMoveDown);
-	nameRow->addWidget(downButton);
 
 	mainLayout->addLayout(nameRow);
 
@@ -255,22 +239,6 @@ void MixerItem::OnMuteToggled(bool checked)
 	obs_source_set_muted(source, checked);
 }
 
-void MixerItem::OnMoveUp()
-{
-	emit MoveUpRequested(this);
-}
-
-void MixerItem::OnMoveDown()
-{
-	emit MoveDownRequested(this);
-}
-
-void MixerItem::UpdateButtons(bool canMoveUp, bool canMoveDown)
-{
-	upButton->setEnabled(canMoveUp);
-	downButton->setEnabled(canMoveDown);
-}
-
 void MixerItem::RefreshName()
 {
 	nameLabel->setText(GetSourceName());
@@ -281,6 +249,32 @@ void MixerItem::SetVertical(bool vert)
 {
 	vertical = vert;
 	// TODO: Implement layout change for vertical mode
+}
+
+void MixerItem::SetSelected(bool sel)
+{
+	if (selected == sel)
+		return;
+
+	selected = sel;
+	UpdateSelectionStyle();
+}
+
+void MixerItem::UpdateSelectionStyle()
+{
+	if (selected) {
+		setStyleSheet("MixerItem { border: 2px solid palette(highlight); }");
+	} else {
+		setStyleSheet("");
+	}
+}
+
+void MixerItem::mousePressEvent(QMouseEvent *event)
+{
+	if (event->button() == Qt::LeftButton) {
+		emit Selected(this);
+	}
+	QFrame::mousePressEvent(event);
 }
 
 void MixerItem::OnConfigClicked()
