@@ -325,6 +325,7 @@ void AudioMixerDock::MoveSourceUp(MixerItem *item)
 		newOrder.push_back(mi->GetSourceUUID().toStdString());
 	}
 	orderManager->SetOrder(newOrder);
+	orderManager->Save();
 
 	// Refresh layout
 	RefreshMixerLayout();
@@ -345,6 +346,7 @@ void AudioMixerDock::MoveSourceDown(MixerItem *item)
 		newOrder.push_back(mi->GetSourceUUID().toStdString());
 	}
 	orderManager->SetOrder(newOrder);
+	orderManager->Save();
 
 	// Refresh layout
 	RefreshMixerLayout();
