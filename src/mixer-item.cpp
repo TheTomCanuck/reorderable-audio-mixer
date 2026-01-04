@@ -103,6 +103,7 @@ void MixerItem::SetupUI()
 
 	volMeter = new VolumeMeter(this);
 	volMeter->setMinimumHeight(20);
+	volMeter->muted = obs_source_muted(source);
 	meterRow->addWidget(volMeter, 1);
 
 	volLabel = new QLabel();
