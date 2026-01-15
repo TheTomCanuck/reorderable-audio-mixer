@@ -5,6 +5,8 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 
+#include <set>
+
 #include <QScrollBar>
 #include <QCursor>
 #include <QStyle>
@@ -231,6 +233,9 @@ void AudioMixerDock::RefreshMixerLayout()
 		mixerLayout->addWidget(item);
 	}
 
+	// Save order immediately
+	orderManager->Save();
+
 	// Update empty state
 	emptyLabel->setVisible(mixerItems.empty());
 
@@ -294,15 +299,23 @@ void AudioMixerDock::OnMoveUpClicked()
 	// Swap in our list
 	std::swap(mixerItems[index], mixerItems[index - 1]);
 
-	// Update order manager
+	// Update order manager - preserve inactive sources
 	std::vector<std::string> newOrder;
+	std::set<std::string> visibleUuids;
 	for (MixerItem *mi : mixerItems) {
-		newOrder.push_back(mi->GetSourceUUID().toStdString());
+		std::string uuid = mi->GetSourceUUID().toStdString();
+		newOrder.push_back(uuid);
+		visibleUuids.insert(uuid);
+	}
+	// Append inactive sources (in saved order) that aren't currently visible
+	for (const std::string &uuid : orderManager->GetOrder()) {
+		if (visibleUuids.find(uuid) == visibleUuids.end()) {
+			newOrder.push_back(uuid);
+		}
 	}
 	orderManager->SetOrder(newOrder);
-	orderManager->Save();
 
-	// Refresh layout
+	// Refresh layout (also saves)
 	RefreshMixerLayout();
 }
 
@@ -318,15 +331,23 @@ void AudioMixerDock::OnMoveDownClicked()
 	// Swap in our list
 	std::swap(mixerItems[index], mixerItems[index + 1]);
 
-	// Update order manager
+	// Update order manager - preserve inactive sources
 	std::vector<std::string> newOrder;
+	std::set<std::string> visibleUuids;
 	for (MixerItem *mi : mixerItems) {
-		newOrder.push_back(mi->GetSourceUUID().toStdString());
+		std::string uuid = mi->GetSourceUUID().toStdString();
+		newOrder.push_back(uuid);
+		visibleUuids.insert(uuid);
+	}
+	// Append inactive sources (in saved order) that aren't currently visible
+	for (const std::string &uuid : orderManager->GetOrder()) {
+		if (visibleUuids.find(uuid) == visibleUuids.end()) {
+			newOrder.push_back(uuid);
+		}
 	}
 	orderManager->SetOrder(newOrder);
-	orderManager->Save();
 
-	// Refresh layout
+	// Refresh layout (also saves)
 	RefreshMixerLayout();
 }
 
@@ -475,6 +496,12 @@ void AudioMixerDock::HideSource(OBSSource source)
 {
 	if (!SourceMixerHidden(source)) {
 		SetSourceMixerHidden(source, true);
+		// Remove from saved order - hidden sources lose their position
+		const char *uuid = obs_source_get_uuid(source);
+		if (uuid) {
+			orderManager->RemoveSource(uuid);
+			orderManager->Save();
+		}
 		DeactivateAudioSource(source);
 	}
 }
