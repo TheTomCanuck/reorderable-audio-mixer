@@ -13,7 +13,7 @@
 MixerItem::MixerItem(OBSSource source_, bool vertical_, QWidget *parent)
 	: QFrame(parent),
 	  source(source_),
-	  vertical(vertical_)
+	  vertical(false)  // Start as horizontal, SetupUI creates horizontal layout
 {
 	// Create OBS fader and volmeter
 	obs_fader = obs_fader_create(OBS_FADER_LOG);
@@ -27,6 +27,11 @@ MixerItem::MixerItem(OBSSource source_, bool vertical_, QWidget *parent)
 
 	// Initialize volume display
 	UpdateVolumeLabel();
+
+	// Apply vertical layout if requested
+	if (vertical_) {
+		SetVertical(true);
+	}
 }
 
 MixerItem::~MixerItem()
@@ -248,8 +253,107 @@ void MixerItem::RefreshName()
 
 void MixerItem::SetVertical(bool vert)
 {
+	if (vertical == vert)
+		return;
+
 	vertical = vert;
-	// TODO: Implement layout change for vertical mode
+
+	// Remove the old layout
+	QLayout *oldLayout = layout();
+	if (oldLayout) {
+		// Reparent all widgets to this before deleting layout
+		QList<QWidget *> widgets;
+		widgets << nameLabel << configButton << volMeter << volLabel << muteCheckbox << slider;
+		for (QWidget *w : widgets) {
+			if (w)
+				w->setParent(this);
+		}
+		delete oldLayout;
+	}
+
+	if (vertical) {
+		// Vertical layout: narrow column with vertical slider/meter
+		// [Name Label]
+		// [Config] [Mute]
+		// [===Meter===]  <- vertical
+		// [===Slider==]  <- vertical
+		// [dB Label]
+
+		QVBoxLayout *mainLayout = new QVBoxLayout(this);
+		mainLayout->setContentsMargins(6, 6, 6, 6);
+		mainLayout->setSpacing(2);
+
+		// Name at top
+		nameLabel->setAlignment(Qt::AlignCenter);
+		mainLayout->addWidget(nameLabel);
+
+		// Config and mute buttons row
+		QHBoxLayout *buttonRow = new QHBoxLayout();
+		buttonRow->setSpacing(2);
+		buttonRow->addWidget(configButton);
+		buttonRow->addStretch();
+		buttonRow->addWidget(muteCheckbox);
+		mainLayout->addLayout(buttonRow);
+
+		// Vertical meter
+		volMeter->setVertical(true);
+		mainLayout->addWidget(volMeter, 1);
+
+		// Vertical slider
+		slider->setOrientation(Qt::Vertical);
+		slider->setMinimumHeight(60);
+		mainLayout->addWidget(slider, 1, Qt::AlignHCenter);
+
+		// Volume label at bottom
+		volLabel->setAlignment(Qt::AlignCenter);
+		mainLayout->addWidget(volLabel);
+
+		// Set size policy for vertical mode
+		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+		setMinimumWidth(80);
+		setMaximumWidth(120);
+	} else {
+		// Horizontal layout: wide row with horizontal slider/meter
+		// Same as original SetupUI layout
+		QVBoxLayout *mainLayout = new QVBoxLayout(this);
+		mainLayout->setContentsMargins(6, 6, 6, 6);
+		mainLayout->setSpacing(2);
+
+		// Row 1: Name
+		QHBoxLayout *nameRow = new QHBoxLayout();
+		nameRow->setSpacing(4);
+		nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+		nameRow->addWidget(nameLabel, 1);
+		mainLayout->addLayout(nameRow);
+
+		// Row 2: Config button + Volume meter + dB label
+		QHBoxLayout *meterRow = new QHBoxLayout();
+		meterRow->setSpacing(4);
+		meterRow->addWidget(configButton);
+		volMeter->setVertical(false);
+		meterRow->addWidget(volMeter, 1);
+		volLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+		meterRow->addWidget(volLabel);
+		mainLayout->addLayout(meterRow);
+
+		// Row 3: Mute checkbox + Slider + Spacer
+		QHBoxLayout *sliderRow = new QHBoxLayout();
+		sliderRow->setSpacing(4);
+		sliderRow->addWidget(muteCheckbox);
+		slider->setOrientation(Qt::Horizontal);
+		slider->setMinimumHeight(0);
+		sliderRow->addWidget(slider, 1);
+		// Spacer to align slider end with meter end
+		QWidget *sliderSpacer = new QWidget();
+		sliderSpacer->setFixedWidth(50);
+		sliderRow->addWidget(sliderSpacer);
+		mainLayout->addLayout(sliderRow);
+
+		// Set size policy for horizontal mode
+		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+		setMinimumWidth(0);
+		setMaximumWidth(QWIDGETSIZE_MAX);
+	}
 }
 
 void MixerItem::SetSelected(bool sel)

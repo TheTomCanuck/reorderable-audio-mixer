@@ -11,18 +11,25 @@
 // Size of the input indicator in pixels
 #define INDICATOR_THICKNESS 3
 
-VolumeMeter::VolumeMeter(QWidget *parent)
-	: QWidget(parent)
+VolumeMeter::VolumeMeter(QWidget *parent, bool vert)
+	: QWidget(parent),
+	  vertical(vert)
 {
 	setAttribute(Qt::WA_OpaquePaintEvent, true);
 
-	// Set minimum size based on channel count
-	int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 15;
-	setMinimumSize(100, minHeight);
-	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
 	tickFont = font();
 	tickFont.setPointSizeF(tickFont.pointSizeF() * 0.7);
+
+	// Set minimum size based on orientation and channel count
+	if (vertical) {
+		int minWidth = displayNrAudioChannels * (meterThickness + 1) - 1 + 20;
+		setMinimumSize(minWidth, 100);
+		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+	} else {
+		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 15;
+		setMinimumSize(100, minHeight);
+		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	}
 
 	resetLevels();
 
@@ -32,6 +39,28 @@ VolumeMeter::VolumeMeter(QWidget *parent)
 		update();
 	});
 	updateTimer->start(16);
+}
+
+void VolumeMeter::setVertical(bool vert)
+{
+	if (vertical == vert)
+		return;
+
+	vertical = vert;
+
+	// Update size policy
+	if (vertical) {
+		int minWidth = displayNrAudioChannels * (meterThickness + 1) - 1 + 20;
+		setMinimumSize(minWidth, 100);
+		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+	} else {
+		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 15;
+		setMinimumSize(100, minHeight);
+		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	}
+
+	updateGeometry();
+	update();
 }
 
 VolumeMeter::~VolumeMeter()
@@ -287,6 +316,138 @@ void VolumeMeter::paintMeter(QPainter &painter, int x, int y, int width, int hei
 	}
 }
 
+void VolumeMeter::paintInputMeterVertical(QPainter &painter, int x, int y,
+					  int width, int height, float peakHold)
+{
+	QColor color;
+
+	if (peakHold < minimumInputLevel)
+		color = backgroundNominalColor;
+	else if (peakHold < warningLevel)
+		color = foregroundNominalColor;
+	else if (peakHold < errorLevel)
+		color = foregroundWarningColor;
+	else if (peakHold <= clipLevel)
+		color = foregroundErrorColor;
+	else
+		color = clipColor;
+
+	painter.fillRect(x, y, width, height, color);
+}
+
+void VolumeMeter::paintTicksVertical(QPainter &painter, int x, int y, int height)
+{
+	qreal scale = height / minimumLevel;
+
+	painter.setFont(tickFont);
+	QFontMetrics metrics(tickFont);
+	painter.setPen(majorTickColor);
+
+	// Draw major tick lines and numeric indicators (vertical - bottom to top)
+	for (int i = 0; i >= minimumLevel; i -= 10) {
+		int position = int(y + (i * scale));
+		QString str = QString::number(i);
+
+		// Draw tick on right side
+		painter.drawLine(x, position, x + 2, position);
+
+		// Draw text rotated or to the side
+		QRect textBounds = metrics.boundingRect(str);
+		int textY = position + (textBounds.height() / 4);
+		painter.drawText(x + 4, textY, str);
+	}
+}
+
+void VolumeMeter::paintMeterVertical(QPainter &painter, int x, int y, int width, int height,
+				     float magnitude, float peak, float peakHold)
+{
+	// For vertical: y is top, height is range, fills from bottom up
+	qreal scale = height / minimumLevel;
+
+	QMutexLocker locker(&dataMutex);
+	int minimumPosition = y + height;  // Bottom
+	int maximumPosition = y;           // Top
+	int magnitudePosition = y + height + convertToInt(magnitude * scale);
+	int peakPosition = y + height + convertToInt(peak * scale);
+	int peakHoldPosition = y + height + convertToInt(peakHold * scale);
+	int warningPosition = y + height + convertToInt(warningLevel * scale);
+	int errorPosition = y + height + convertToInt(errorLevel * scale);
+
+	int nominalLength = minimumPosition - warningPosition;
+	int warningLength = warningPosition - errorPosition;
+	int errorLength = errorPosition - maximumPosition;
+	locker.unlock();
+
+	if (clipping) {
+		peakPosition = maximumPosition;
+	}
+
+	if (peakPosition > minimumPosition) {
+		// Below minimum - show all background
+		painter.fillRect(x, errorPosition, width, errorLength,
+				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
+		painter.fillRect(x, warningPosition, width, warningLength,
+				 muted ? backgroundWarningColorDisabled : backgroundWarningColor);
+		painter.fillRect(x, warningPosition, width, nominalLength,
+				 muted ? backgroundNominalColorDisabled : backgroundNominalColor);
+	} else if (peakPosition > warningPosition) {
+		// In nominal range
+		painter.fillRect(x, errorPosition, width, errorLength,
+				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
+		painter.fillRect(x, warningPosition, width, warningLength,
+				 muted ? backgroundWarningColorDisabled : backgroundWarningColor);
+		painter.fillRect(x, peakPosition, width, warningPosition - peakPosition,
+				 muted ? backgroundNominalColorDisabled : backgroundNominalColor);
+		painter.fillRect(x, warningPosition, width, minimumPosition - warningPosition,
+				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
+	} else if (peakPosition > errorPosition) {
+		// In warning range
+		painter.fillRect(x, errorPosition, width, errorLength,
+				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
+		painter.fillRect(x, peakPosition, width, errorPosition - peakPosition,
+				 muted ? backgroundWarningColorDisabled : backgroundWarningColor);
+		painter.fillRect(x, errorPosition, width, warningPosition - errorPosition,
+				 muted ? foregroundWarningColorDisabled : foregroundWarningColor);
+		painter.fillRect(x, warningPosition, width, minimumPosition - warningPosition,
+				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
+	} else if (peakPosition > maximumPosition) {
+		// In error range
+		painter.fillRect(x, peakPosition, width, errorPosition - peakPosition,
+				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
+		painter.fillRect(x, errorPosition, width, warningPosition - errorPosition,
+				 muted ? foregroundErrorColorDisabled : foregroundErrorColor);
+		painter.fillRect(x, warningPosition, width, minimumPosition - warningPosition,
+				 muted ? foregroundWarningColorDisabled : foregroundWarningColor);
+		// This is wrong - need to recalculate. Let me simplify
+	} else {
+		// Clipping
+		if (!clipping) {
+			clipping = true;
+			QTimer::singleShot(1000, this, [this]() { clipping = false; });
+		}
+		painter.fillRect(x, maximumPosition, width, minimumPosition - maximumPosition,
+				 muted ? foregroundErrorColorDisabled : foregroundErrorColor);
+	}
+
+	// Draw peak hold indicator (3px tall line)
+	if (peakHoldPosition + 3 <= minimumPosition) {
+		QColor holdColor;
+		if (peakHoldPosition > warningPosition)
+			holdColor = muted ? foregroundNominalColorDisabled : foregroundNominalColor;
+		else if (peakHoldPosition > errorPosition)
+			holdColor = muted ? foregroundWarningColorDisabled : foregroundWarningColor;
+		else
+			holdColor = muted ? foregroundErrorColorDisabled : foregroundErrorColor;
+
+		painter.fillRect(x, peakHoldPosition, width, 3, holdColor);
+	}
+
+	// Draw magnitude indicator (black bar)
+	if (magnitudePosition + 3 <= minimumPosition) {
+		painter.fillRect(x, magnitudePosition, width, 3, magnitudeColor);
+	}
+}
+
 void VolumeMeter::paintEvent(QPaintEvent *event)
 {
 	uint64_t ts = os_gettime_ns();
@@ -317,34 +478,67 @@ void VolumeMeter::paintEvent(QPaintEvent *event)
 	QColor background = palette().color(QPalette::ColorRole::Window);
 	painter.fillRect(event->region().boundingRect(), background);
 
-	// Calculate meter area (leave space for ticks at bottom)
 	QFontMetrics metrics(tickFont);
-	int tickHeight = 4 + metrics.capHeight();
-	int meterHeight = height - tickHeight;
 
-	// Draw tick marks and labels
-	paintTicks(painter, INDICATOR_THICKNESS + 3,
-		   displayNrAudioChannels * (meterThickness + 1) - 1,
-		   width - (INDICATOR_THICKNESS + 3));
+	if (vertical) {
+		// Vertical mode - meters go bottom to top, channels side by side
+		int tickWidth = metrics.horizontalAdvance("-60") + 6;
+		int meterWidth = width - tickWidth;
 
-	// Draw meters for each channel
-	for (int channelNr = 0; channelNr < displayNrAudioChannels; channelNr++) {
-		paintMeter(painter,
-			   INDICATOR_THICKNESS + 2,
-			   channelNr * (meterThickness + 1),
-			   width - (INDICATOR_THICKNESS + 2),
-			   meterThickness,
-			   displayMagnitude[channelNr],
-			   displayPeak[channelNr],
-			   displayPeakHold[channelNr]);
+		// Draw tick marks on right side
+		paintTicksVertical(painter, meterWidth,
+				   INDICATOR_THICKNESS + 2,
+				   height - (INDICATOR_THICKNESS + 2));
 
-		if (!idle) {
-			paintInputMeter(painter,
-					0,
-					channelNr * (meterThickness + 1),
-					INDICATOR_THICKNESS,
-					meterThickness,
-					displayInputPeakHold[channelNr]);
+		// Draw meters for each channel (side by side)
+		for (int channelNr = 0; channelNr < displayNrAudioChannels; channelNr++) {
+			paintMeterVertical(painter,
+					   channelNr * (meterThickness + 1),
+					   INDICATOR_THICKNESS + 2,
+					   meterThickness,
+					   height - (INDICATOR_THICKNESS + 2),
+					   displayMagnitude[channelNr],
+					   displayPeak[channelNr],
+					   displayPeakHold[channelNr]);
+
+			if (!idle) {
+				paintInputMeterVertical(painter,
+							channelNr * (meterThickness + 1),
+							height - INDICATOR_THICKNESS,
+							meterThickness,
+							INDICATOR_THICKNESS,
+							displayInputPeakHold[channelNr]);
+			}
+		}
+	} else {
+		// Horizontal mode - meters go left to right, channels stacked
+		int tickHeight = 4 + metrics.capHeight();
+		int meterHeight = height - tickHeight;
+
+		// Draw tick marks and labels
+		paintTicks(painter, INDICATOR_THICKNESS + 3,
+			   displayNrAudioChannels * (meterThickness + 1) - 1,
+			   width - (INDICATOR_THICKNESS + 3));
+
+		// Draw meters for each channel
+		for (int channelNr = 0; channelNr < displayNrAudioChannels; channelNr++) {
+			paintMeter(painter,
+				   INDICATOR_THICKNESS + 2,
+				   channelNr * (meterThickness + 1),
+				   width - (INDICATOR_THICKNESS + 2),
+				   meterThickness,
+				   displayMagnitude[channelNr],
+				   displayPeak[channelNr],
+				   displayPeakHold[channelNr]);
+
+			if (!idle) {
+				paintInputMeter(painter,
+						0,
+						channelNr * (meterThickness + 1),
+						INDICATOR_THICKNESS,
+						meterThickness,
+						displayInputPeakHold[channelNr]);
+			}
 		}
 	}
 

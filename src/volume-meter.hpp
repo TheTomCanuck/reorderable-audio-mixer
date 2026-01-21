@@ -30,12 +30,15 @@ class VolumeMeter : public QWidget {
 		WRITE setMinorTickColor DESIGNABLE true)
 
 public:
-	explicit VolumeMeter(QWidget *parent = nullptr);
+	explicit VolumeMeter(QWidget *parent = nullptr, bool vertical = false);
 	~VolumeMeter();
 
 	void setLevels(const float magnitude[MAX_AUDIO_CHANNELS],
 		       const float peak[MAX_AUDIO_CHANNELS],
 		       const float inputPeak[MAX_AUDIO_CHANNELS]);
+
+	void setVertical(bool vert);
+	bool isVertical() const { return vertical; }
 
 	bool muted = false;
 
@@ -68,10 +71,17 @@ private:
 	void calculateBallisticsForChannel(int channelNr, qreal timeSinceLastRedraw);
 	void paintMeter(QPainter &painter, int x, int y, int width, int height,
 			float magnitude, float peak, float peakHold);
+	void paintMeterVertical(QPainter &painter, int x, int y, int width, int height,
+				float magnitude, float peak, float peakHold);
 	void paintTicks(QPainter &painter, int x, int y, int width);
+	void paintTicksVertical(QPainter &painter, int x, int y, int height);
 	void paintInputMeter(QPainter &painter, int x, int y, int width, int height,
 			     float peakHold);
+	void paintInputMeterVertical(QPainter &painter, int x, int y, int width, int height,
+				     float peakHold);
 	int convertToInt(float number);
+
+	bool vertical = false;
 
 	QMutex dataMutex;
 

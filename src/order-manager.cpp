@@ -45,6 +45,9 @@ void OrderManager::Load()
 
 	orderByCollection.clear();
 
+	// Load global preferences
+	verticalLayout = obs_data_get_bool(data, "verticalLayout");
+
 	obs_data_t *collections = obs_data_get_obj(data, "collections");
 	if (collections) {
 		// Iterate through collections
@@ -92,6 +95,7 @@ void OrderManager::Save()
 
 	obs_data_t *data = obs_data_create();
 	obs_data_set_int(data, "version", 1);
+	obs_data_set_bool(data, "verticalLayout", verticalLayout);
 
 	obs_data_t *collections = obs_data_create();
 

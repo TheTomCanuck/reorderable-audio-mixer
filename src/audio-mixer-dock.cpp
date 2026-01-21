@@ -18,8 +18,13 @@ AudioMixerDock::AudioMixerDock(QWidget *parent)
 	SetupUI();
 	ConnectSignalHandlers();
 
-	// Load saved order
+	// Load saved order and preferences
 	orderManager->Load();
+
+	// Apply saved vertical layout preference
+	if (orderManager->IsVerticalLayout()) {
+		SetVerticalLayout(true);
+	}
 
 	// Get current scene collection name
 	char *collection = obs_frontend_get_current_scene_collection();
@@ -468,6 +473,11 @@ void AudioMixerDock::OnSceneCollectionChanged()
 
 void AudioMixerDock::OnFinishedLoading()
 {
+	// Re-apply vertical layout preference in case it wasn't ready during construction
+	if (orderManager->IsVerticalLayout() && !vertical) {
+		SetVerticalLayout(true);
+	}
+
 	EnumerateAudioSources();
 }
 
@@ -540,8 +550,52 @@ void AudioMixerDock::ShowContextMenu(const QPoint &pos)
 
 	QMenu menu(this);
 
+	// Toggle layout - show opposite of current state
+	const char *layoutText = vertical
+		? obs_module_text("BetterAudioMixer.HorizontalLayout")
+		: obs_module_text("BetterAudioMixer.VerticalLayout");
+	QAction *layoutAction = menu.addAction(layoutText);
+	connect(layoutAction, &QAction::triggered, this, [this]() {
+		SetVerticalLayout(!vertical);
+	});
+
+	menu.addSeparator();
+
 	QAction *unhideAllAction = menu.addAction(obs_module_text("BetterAudioMixer.UnhideAll"));
 	connect(unhideAllAction, &QAction::triggered, this, &AudioMixerDock::UnhideAllSources);
 
 	menu.exec(QCursor::pos());
+}
+
+void AudioMixerDock::SetVerticalLayout(bool vert)
+{
+	if (vertical == vert)
+		return;
+
+	vertical = vert;
+
+	// Update scroll area scroll direction
+	if (vertical) {
+		scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+		scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	} else {
+		scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+		scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	}
+
+	// Replace mixer layout direction
+	QBoxLayout::Direction newDir = vertical ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom;
+	mixerLayout->setDirection(newDir);
+
+	// Update alignment
+	mixerLayout->setAlignment(vertical ? Qt::AlignLeft : Qt::AlignTop);
+
+	// Update all mixer items
+	for (MixerItem *item : mixerItems) {
+		item->SetVertical(vertical);
+	}
+
+	// Save preference
+	orderManager->SetVerticalLayout(vertical);
+	orderManager->Save();
 }

@@ -37,6 +37,7 @@ public:
 	~AudioMixerDock();
 
 	bool IsVertical() const { return vertical; }
+	void SetVerticalLayout(bool vert);
 
 public slots:
 	void OnSceneCollectionChanged();
