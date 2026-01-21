@@ -88,7 +88,6 @@ void MixerItem::SetupUI()
 	nameRow->setSpacing(4);
 
 	nameLabel = new QLabel(GetSourceName());
-	nameLabel->setStyleSheet("font-weight: bold;");
 	nameRow->addWidget(nameLabel, 1);
 
 	mainLayout->addLayout(nameRow);
@@ -275,16 +274,20 @@ void MixerItem::SetVertical(bool vert)
 		// Vertical layout: narrow column with vertical slider/meter
 		// [Name Label]
 		// [Config] [Mute]
-		// [===Meter===]  <- vertical
-		// [===Slider==]  <- vertical
+		// [Meter | Slider] side by side
 		// [dB Label]
 
 		QVBoxLayout *mainLayout = new QVBoxLayout(this);
-		mainLayout->setContentsMargins(6, 6, 6, 6);
+		mainLayout->setContentsMargins(4, 4, 4, 4);
 		mainLayout->setSpacing(2);
 
-		// Name at top
-		nameLabel->setAlignment(Qt::AlignCenter);
+		// Name at top - use small fixed font size for vertical mode
+		QFont smallFont = nameLabel->font();
+		smallFont.setPixelSize(10);  // Small fixed pixel size for vertical layout
+		nameLabel->setFont(smallFont);
+		nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+		nameLabel->setWordWrap(false);
+		nameLabel->setTextFormat(Qt::PlainText);
 		mainLayout->addWidget(nameLabel);
 
 		// Config and mute buttons row
@@ -295,22 +298,29 @@ void MixerItem::SetVertical(bool vert)
 		buttonRow->addWidget(muteCheckbox);
 		mainLayout->addLayout(buttonRow);
 
-		// Vertical meter
-		volMeter->setVertical(true);
-		mainLayout->addWidget(volMeter, 1);
+		// Meter and slider side by side
+		QHBoxLayout *meterSliderRow = new QHBoxLayout();
+		meterSliderRow->setSpacing(4);
 
-		// Vertical slider
+		// Vertical meter on left
+		volMeter->setVertical(true);
+		meterSliderRow->addWidget(volMeter);
+
+		// Vertical slider on right
 		slider->setOrientation(Qt::Vertical);
 		slider->setMinimumHeight(60);
-		mainLayout->addWidget(slider, 1, Qt::AlignHCenter);
+		meterSliderRow->addWidget(slider);
+
+		mainLayout->addLayout(meterSliderRow, 1);
 
 		// Volume label at bottom
 		volLabel->setAlignment(Qt::AlignCenter);
+		volLabel->setFixedWidth(QWIDGETSIZE_MAX);  // Allow full width
 		mainLayout->addWidget(volLabel);
 
 		// Set size policy for vertical mode
 		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-		setMinimumWidth(80);
+		setMinimumWidth(90);
 		setMaximumWidth(120);
 	} else {
 		// Horizontal layout: wide row with horizontal slider/meter
@@ -319,7 +329,10 @@ void MixerItem::SetVertical(bool vert)
 		mainLayout->setContentsMargins(6, 6, 6, 6);
 		mainLayout->setSpacing(2);
 
-		// Row 1: Name
+		// Row 1: Name - restore normal font size
+		QFont normalFont = nameLabel->font();
+		normalFont.setPixelSize(13);  // Normal pixel size for horizontal layout
+		nameLabel->setFont(normalFont);
 		QHBoxLayout *nameRow = new QHBoxLayout();
 		nameRow->setSpacing(4);
 		nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);

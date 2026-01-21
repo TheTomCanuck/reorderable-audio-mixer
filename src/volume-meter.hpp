@@ -121,7 +121,7 @@ private:
 	QColor foregroundErrorColorDisabled{150, 150, 150};
 
 	// Meter settings
-	int meterThickness = 3;
+	int meterThickness = 7;
 	qreal minimumLevel = -60.0;
 	qreal warningLevel = -20.0;
 	qreal errorLevel = -9.0;

@@ -5,11 +5,15 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QTimer>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
 // Size of the input indicator in pixels
 #define INDICATOR_THICKNESS 3
+
+// Padding on top and bottom of vertical meters
+#define METER_PADDING 1
 
 VolumeMeter::VolumeMeter(QWidget *parent, bool vert)
 	: QWidget(parent),
@@ -19,14 +23,17 @@ VolumeMeter::VolumeMeter(QWidget *parent, bool vert)
 
 	tickFont = font();
 	tickFont.setPointSizeF(tickFont.pointSizeF() * 0.7);
+	QFontMetrics metrics(tickFont);
 
 	// Set minimum size based on orientation and channel count
 	if (vertical) {
-		int minWidth = displayNrAudioChannels * (meterThickness + 1) - 1 + 20;
-		setMinimumSize(minWidth, 100);
+		// Match OBS calculation: meter width + tick marks + scale label width + spacing
+		int meterWidth = displayNrAudioChannels * (meterThickness + 1) - 1;
+		QRect scaleBounds = metrics.boundingRect("-88");
+		setMinimumSize(meterWidth + 10 + scaleBounds.width() + 2, 100);
 		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	} else {
-		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 15;
+		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 4 + metrics.capHeight();
 		setMinimumSize(100, minHeight);
 		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	}
@@ -48,13 +55,15 @@ void VolumeMeter::setVertical(bool vert)
 
 	vertical = vert;
 
-	// Update size policy
+	// Update size policy - match OBS calculation
+	QFontMetrics metrics(tickFont);
 	if (vertical) {
-		int minWidth = displayNrAudioChannels * (meterThickness + 1) - 1 + 20;
-		setMinimumSize(minWidth, 100);
+		int meterWidth = displayNrAudioChannels * (meterThickness + 1) - 1;
+		QRect scaleBounds = metrics.boundingRect("-88");
+		setMinimumSize(meterWidth + 10 + scaleBounds.width() + 2, 100);
 		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	} else {
-		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 15;
+		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 4 + metrics.capHeight();
 		setMinimumSize(100, minHeight);
 		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	}
@@ -337,115 +346,115 @@ void VolumeMeter::paintInputMeterVertical(QPainter &painter, int x, int y,
 
 void VolumeMeter::paintTicksVertical(QPainter &painter, int x, int y, int height)
 {
+	// Match OBS's paintVTicks exactly
 	qreal scale = height / minimumLevel;
 
 	painter.setFont(tickFont);
 	QFontMetrics metrics(tickFont);
 	painter.setPen(majorTickColor);
 
-	// Draw major tick lines and numeric indicators (vertical - bottom to top)
-	for (int i = 0; i >= minimumLevel; i -= 10) {
-		int position = int(y + (i * scale));
+	// Draw major tick lines and numeric indicators every 5dB
+	for (int i = 0; i >= minimumLevel; i -= 5) {
+		int position = y + int(i * scale) + METER_PADDING;
 		QString str = QString::number(i);
 
-		// Draw tick on right side
-		painter.drawLine(x, position, x + 2, position);
+		// Position text based on dB value
+		if (i == 0) {
+			painter.drawText(x + 6, position + metrics.capHeight(), str);
+		} else {
+			painter.drawText(x + 4, position + (metrics.capHeight() / 2), str);
+		}
 
-		// Draw text rotated or to the side
-		QRect textBounds = metrics.boundingRect(str);
-		int textY = position + (textBounds.height() / 4);
-		painter.drawText(x + 4, textY, str);
+		// Draw tick mark
+		painter.drawLine(x, position, x + 2, position);
 	}
 }
 
 void VolumeMeter::paintMeterVertical(QPainter &painter, int x, int y, int width, int height,
 				     float magnitude, float peak, float peakHold)
 {
-	// For vertical: y is top, height is range, fills from bottom up
+	// Match OBS's paintVMeter exactly - uses same math as horizontal
+	// but with Y axis inverted by painter transform in paintEvent
 	qreal scale = height / minimumLevel;
 
 	QMutexLocker locker(&dataMutex);
-	int minimumPosition = y + height;  // Bottom
-	int maximumPosition = y;           // Top
-	int magnitudePosition = y + height + convertToInt(magnitude * scale);
-	int peakPosition = y + height + convertToInt(peak * scale);
-	int peakHoldPosition = y + height + convertToInt(peakHold * scale);
-	int warningPosition = y + height + convertToInt(warningLevel * scale);
-	int errorPosition = y + height + convertToInt(errorLevel * scale);
+	int minimumPosition = y + 0;
+	int maximumPosition = y + height;
+	int magnitudePosition = y + height - convertToInt(magnitude * scale);
+	int peakPosition = y + height - convertToInt(peak * scale);
+	int peakHoldPosition = y + height - convertToInt(peakHold * scale);
+	int warningPosition = y + height - convertToInt(warningLevel * scale);
+	int errorPosition = y + height - convertToInt(errorLevel * scale);
 
-	int nominalLength = minimumPosition - warningPosition;
-	int warningLength = warningPosition - errorPosition;
-	int errorLength = errorPosition - maximumPosition;
+	int nominalLength = warningPosition - minimumPosition;
+	int warningLength = errorPosition - warningPosition;
+	int errorLength = maximumPosition - errorPosition;
 	locker.unlock();
 
 	if (clipping) {
 		peakPosition = maximumPosition;
 	}
 
-	if (peakPosition > minimumPosition) {
-		// Below minimum - show all background
-		painter.fillRect(x, errorPosition, width, errorLength,
-				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
-		painter.fillRect(x, warningPosition, width, warningLength,
-				 muted ? backgroundWarningColorDisabled : backgroundWarningColor);
-		painter.fillRect(x, warningPosition, width, nominalLength,
+	if (peakPosition < minimumPosition) {
+		painter.fillRect(x, minimumPosition, width, nominalLength,
 				 muted ? backgroundNominalColorDisabled : backgroundNominalColor);
-	} else if (peakPosition > warningPosition) {
-		// In nominal range
-		painter.fillRect(x, errorPosition, width, errorLength,
-				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
 		painter.fillRect(x, warningPosition, width, warningLength,
 				 muted ? backgroundWarningColorDisabled : backgroundWarningColor);
+		painter.fillRect(x, errorPosition, width, errorLength,
+				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
+	} else if (peakPosition < warningPosition) {
+		painter.fillRect(x, minimumPosition, width, peakPosition - minimumPosition,
+				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
 		painter.fillRect(x, peakPosition, width, warningPosition - peakPosition,
 				 muted ? backgroundNominalColorDisabled : backgroundNominalColor);
-		painter.fillRect(x, warningPosition, width, minimumPosition - warningPosition,
-				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
-	} else if (peakPosition > errorPosition) {
-		// In warning range
+		painter.fillRect(x, warningPosition, width, warningLength,
+				 muted ? backgroundWarningColorDisabled : backgroundWarningColor);
 		painter.fillRect(x, errorPosition, width, errorLength,
 				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
+	} else if (peakPosition < errorPosition) {
+		painter.fillRect(x, minimumPosition, width, nominalLength,
+				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
+		painter.fillRect(x, warningPosition, width, peakPosition - warningPosition,
+				 muted ? foregroundWarningColorDisabled : foregroundWarningColor);
 		painter.fillRect(x, peakPosition, width, errorPosition - peakPosition,
 				 muted ? backgroundWarningColorDisabled : backgroundWarningColor);
-		painter.fillRect(x, errorPosition, width, warningPosition - errorPosition,
-				 muted ? foregroundWarningColorDisabled : foregroundWarningColor);
-		painter.fillRect(x, warningPosition, width, minimumPosition - warningPosition,
-				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
-	} else if (peakPosition > maximumPosition) {
-		// In error range
-		painter.fillRect(x, peakPosition, width, errorPosition - peakPosition,
+		painter.fillRect(x, errorPosition, width, errorLength,
 				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
-		painter.fillRect(x, errorPosition, width, warningPosition - errorPosition,
-				 muted ? foregroundErrorColorDisabled : foregroundErrorColor);
-		painter.fillRect(x, warningPosition, width, minimumPosition - warningPosition,
+	} else if (peakPosition < maximumPosition) {
+		painter.fillRect(x, minimumPosition, width, nominalLength,
+				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
+		painter.fillRect(x, warningPosition, width, warningLength,
 				 muted ? foregroundWarningColorDisabled : foregroundWarningColor);
-		// This is wrong - need to recalculate. Let me simplify
+		painter.fillRect(x, errorPosition, width, peakPosition - errorPosition,
+				 muted ? foregroundErrorColorDisabled : foregroundErrorColor);
+		painter.fillRect(x, peakPosition, width, maximumPosition - peakPosition,
+				 muted ? backgroundErrorColorDisabled : backgroundErrorColor);
 	} else {
-		// Clipping
 		if (!clipping) {
 			clipping = true;
 			QTimer::singleShot(1000, this, [this]() { clipping = false; });
 		}
-		painter.fillRect(x, maximumPosition, width, minimumPosition - maximumPosition,
+		int end = errorLength + warningLength + nominalLength;
+		painter.fillRect(x, minimumPosition, width, end,
 				 muted ? foregroundErrorColorDisabled : foregroundErrorColor);
 	}
 
-	// Draw peak hold indicator (3px tall line)
-	if (peakHoldPosition + 3 <= minimumPosition) {
-		QColor holdColor;
-		if (peakHoldPosition > warningPosition)
-			holdColor = muted ? foregroundNominalColorDisabled : foregroundNominalColor;
-		else if (peakHoldPosition > errorPosition)
-			holdColor = muted ? foregroundWarningColorDisabled : foregroundWarningColor;
-		else
-			holdColor = muted ? foregroundErrorColorDisabled : foregroundErrorColor;
+	// Peak hold indicator
+	if (peakHoldPosition - 3 < minimumPosition)
+		; // Peak-hold below minimum, no drawing
+	else if (peakHoldPosition < warningPosition)
+		painter.fillRect(x, peakHoldPosition - 3, width, 3,
+				 muted ? foregroundNominalColorDisabled : foregroundNominalColor);
+	else if (peakHoldPosition < errorPosition)
+		painter.fillRect(x, peakHoldPosition - 3, width, 3,
+				 muted ? foregroundWarningColorDisabled : foregroundWarningColor);
+	else
+		painter.fillRect(x, peakHoldPosition - 3, width, 3,
+				 muted ? foregroundErrorColorDisabled : foregroundErrorColor);
 
-		painter.fillRect(x, peakHoldPosition, width, 3, holdColor);
-	}
-
-	// Draw magnitude indicator (black bar)
-	if (magnitudePosition + 3 <= minimumPosition) {
-		painter.fillRect(x, magnitudePosition, width, 3, magnitudeColor);
-	}
+	// Magnitude indicator
+	if (magnitudePosition - 3 >= minimumPosition)
+		painter.fillRect(x, magnitudePosition - 3, width, 3, magnitudeColor);
 }
 
 void VolumeMeter::paintEvent(QPaintEvent *event)
@@ -481,30 +490,38 @@ void VolumeMeter::paintEvent(QPaintEvent *event)
 	QFontMetrics metrics(tickFont);
 
 	if (vertical) {
-		// Vertical mode - meters go bottom to top, channels side by side
-		int tickWidth = metrics.horizontalAdvance("-60") + 6;
-		int meterWidth = width - tickWidth;
+		// Vertical mode - match OBS stock meter layout exactly
+		// Adjust height for padding
+		height -= METER_PADDING * 2;
+		int meterHeight = height - (INDICATOR_THICKNESS + 3);
 
-		// Draw tick marks on right side
-		paintTicksVertical(painter, meterWidth,
-				   INDICATOR_THICKNESS + 2,
-				   height - (INDICATOR_THICKNESS + 2));
+		// Draw tick marks BEFORE coordinate transform (normal Y axis)
+		paintTicksVertical(painter,
+				   displayNrAudioChannels * (meterThickness + 1) - 1,
+				   0,
+				   meterHeight);
+
+		// Invert the Y axis to ease the meter math (0 at bottom, increases upward)
+		painter.translate(0, height + METER_PADDING);
+		painter.scale(1, -1);
 
 		// Draw meters for each channel (side by side)
 		for (int channelNr = 0; channelNr < displayNrAudioChannels; channelNr++) {
+			// Main meter
 			paintMeterVertical(painter,
 					   channelNr * (meterThickness + 1),
 					   INDICATOR_THICKNESS + 2,
 					   meterThickness,
-					   height - (INDICATOR_THICKNESS + 2),
+					   meterHeight,
 					   displayMagnitude[channelNr],
 					   displayPeak[channelNr],
 					   displayPeakHold[channelNr]);
 
+			// Input indicator at bottom (which appears at top after Y inversion)
 			if (!idle) {
 				paintInputMeterVertical(painter,
 							channelNr * (meterThickness + 1),
-							height - INDICATOR_THICKNESS,
+							0,
 							meterThickness,
 							INDICATOR_THICKNESS,
 							displayInputPeakHold[channelNr]);
