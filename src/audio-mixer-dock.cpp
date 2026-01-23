@@ -5,8 +5,6 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 
-#include <set>
-
 #include <QScrollBar>
 #include <QCursor>
 #include <QStyle>
@@ -301,24 +299,22 @@ void AudioMixerDock::OnMoveUpClicked()
 	if (index <= 0)
 		return;
 
-	// Swap in our list
+	// Get the UUIDs of the two items being swapped
+	std::string uuidSelected = selectedItem->GetSourceUUID().toStdString();
+	std::string uuidAbove = mixerItems[index - 1]->GetSourceUUID().toStdString();
+
+	// Swap in our local list for immediate UI feedback
 	std::swap(mixerItems[index], mixerItems[index - 1]);
 
-	// Update order manager - preserve inactive sources
-	std::vector<std::string> newOrder;
-	std::set<std::string> visibleUuids;
-	for (MixerItem *mi : mixerItems) {
-		std::string uuid = mi->GetSourceUUID().toStdString();
-		newOrder.push_back(uuid);
-		visibleUuids.insert(uuid);
+	// Swap their positions in the global order (preserves all other positions)
+	std::vector<std::string> order = orderManager->GetOrder();
+	auto itSelected = std::find(order.begin(), order.end(), uuidSelected);
+	auto itAbove = std::find(order.begin(), order.end(), uuidAbove);
+
+	if (itSelected != order.end() && itAbove != order.end()) {
+		std::iter_swap(itSelected, itAbove);
+		orderManager->SetOrder(order);
 	}
-	// Append inactive sources (in saved order) that aren't currently visible
-	for (const std::string &uuid : orderManager->GetOrder()) {
-		if (visibleUuids.find(uuid) == visibleUuids.end()) {
-			newOrder.push_back(uuid);
-		}
-	}
-	orderManager->SetOrder(newOrder);
 
 	// Refresh layout (also saves)
 	RefreshMixerLayout();
@@ -333,24 +329,22 @@ void AudioMixerDock::OnMoveDownClicked()
 	if (index < 0 || index >= static_cast<int>(mixerItems.size()) - 1)
 		return;
 
-	// Swap in our list
+	// Get the UUIDs of the two items being swapped
+	std::string uuidSelected = selectedItem->GetSourceUUID().toStdString();
+	std::string uuidBelow = mixerItems[index + 1]->GetSourceUUID().toStdString();
+
+	// Swap in our local list for immediate UI feedback
 	std::swap(mixerItems[index], mixerItems[index + 1]);
 
-	// Update order manager - preserve inactive sources
-	std::vector<std::string> newOrder;
-	std::set<std::string> visibleUuids;
-	for (MixerItem *mi : mixerItems) {
-		std::string uuid = mi->GetSourceUUID().toStdString();
-		newOrder.push_back(uuid);
-		visibleUuids.insert(uuid);
+	// Swap their positions in the global order (preserves all other positions)
+	std::vector<std::string> order = orderManager->GetOrder();
+	auto itSelected = std::find(order.begin(), order.end(), uuidSelected);
+	auto itBelow = std::find(order.begin(), order.end(), uuidBelow);
+
+	if (itSelected != order.end() && itBelow != order.end()) {
+		std::iter_swap(itSelected, itBelow);
+		orderManager->SetOrder(order);
 	}
-	// Append inactive sources (in saved order) that aren't currently visible
-	for (const std::string &uuid : orderManager->GetOrder()) {
-		if (visibleUuids.find(uuid) == visibleUuids.end()) {
-			newOrder.push_back(uuid);
-		}
-	}
-	orderManager->SetOrder(newOrder);
 
 	// Refresh layout (also saves)
 	RefreshMixerLayout();
