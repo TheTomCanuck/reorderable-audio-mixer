@@ -43,46 +43,65 @@ void OrderManager::Load()
 		return;
 	}
 
-	orderByCollection.clear();
+	orderByCollectionScene.clear();
 
 	// Load global preferences
 	verticalLayout = obs_data_get_bool(data, "verticalLayout");
 
-	obs_data_t *collections = obs_data_get_obj(data, "collections");
-	if (collections) {
-		// Iterate through collections
-		obs_data_item_t *item = obs_data_first(collections);
-		while (item) {
-			const char *collectionName = obs_data_item_get_name(item);
-			obs_data_t *collectionData = obs_data_item_get_obj(item);
+	int version = (int)obs_data_get_int(data, "version");
 
-			if (collectionData) {
-				obs_data_array_t *orderArray = obs_data_get_array(collectionData, "order");
-				if (orderArray) {
-					std::vector<std::string> order;
-					size_t count = obs_data_array_count(orderArray);
-					for (size_t i = 0; i < count; i++) {
-						obs_data_t *entry = obs_data_array_item(orderArray, i);
-						const char *uuid = obs_data_get_string(entry, "uuid");
-						if (uuid && *uuid) {
-							order.push_back(uuid);
+	if (version >= 2) {
+		// Version 2: per-scene ordering
+		obs_data_t *collections = obs_data_get_obj(data, "collections");
+		if (collections) {
+			obs_data_item_t *collItem = obs_data_first(collections);
+			while (collItem) {
+				const char *collectionName = obs_data_item_get_name(collItem);
+				obs_data_t *collectionData = obs_data_item_get_obj(collItem);
+
+				if (collectionData) {
+					obs_data_t *scenes = obs_data_get_obj(collectionData, "scenes");
+					if (scenes) {
+						obs_data_item_t *sceneItem = obs_data_first(scenes);
+						while (sceneItem) {
+							const char *sceneName = obs_data_item_get_name(sceneItem);
+							obs_data_t *sceneData = obs_data_item_get_obj(sceneItem);
+
+							if (sceneData) {
+								obs_data_array_t *orderArray = obs_data_get_array(sceneData, "order");
+								if (orderArray) {
+									std::vector<std::string> order;
+									size_t count = obs_data_array_count(orderArray);
+									for (size_t i = 0; i < count; i++) {
+										obs_data_t *entry = obs_data_array_item(orderArray, i);
+										const char *uuid = obs_data_get_string(entry, "uuid");
+										if (uuid && *uuid) {
+											order.push_back(uuid);
+										}
+										obs_data_release(entry);
+									}
+									orderByCollectionScene[collectionName][sceneName] = order;
+									obs_data_array_release(orderArray);
+								}
+								obs_data_release(sceneData);
+							}
+							obs_data_item_next(&sceneItem);
 						}
-						obs_data_release(entry);
+						obs_data_release(scenes);
 					}
-					orderByCollection[collectionName] = order;
-					obs_data_array_release(orderArray);
+					obs_data_release(collectionData);
 				}
-				obs_data_release(collectionData);
+				obs_data_item_next(&collItem);
 			}
-
-			obs_data_item_next(&item);
+			obs_data_release(collections);
 		}
-		obs_data_release(collections);
+		blog(LOG_INFO, "[Reorderable Audio Mixer] Loaded per-scene order config (v%d)", version);
+	} else {
+		// Version 1 (old global order format) - ignore old data, start fresh
+		blog(LOG_INFO, "[Reorderable Audio Mixer] Old config format (v%d), starting fresh with per-scene ordering", version);
 	}
 
 	obs_data_release(data);
-	blog(LOG_INFO, "[Reorderable Audio Mixer] Loaded order for %zu collections",
-		orderByCollection.size());
 }
 
 void OrderManager::Save()
@@ -94,26 +113,37 @@ void OrderManager::Save()
 	EnsureDirectory(path);
 
 	obs_data_t *data = obs_data_create();
-	obs_data_set_int(data, "version", 1);
+	obs_data_set_int(data, "version", 2);
 	obs_data_set_bool(data, "verticalLayout", verticalLayout);
 
 	obs_data_t *collections = obs_data_create();
 
-	for (const auto &pair : orderByCollection) {
+	for (const auto &collPair : orderByCollectionScene) {
 		obs_data_t *collectionData = obs_data_create();
-		obs_data_array_t *orderArray = obs_data_array_create();
+		obs_data_t *scenes = obs_data_create();
 
-		for (const std::string &uuid : pair.second) {
-			obs_data_t *entry = obs_data_create();
-			obs_data_set_string(entry, "uuid", uuid.c_str());
-			obs_data_array_push_back(orderArray, entry);
-			obs_data_release(entry);
+		for (const auto &scenePair : collPair.second) {
+			obs_data_t *sceneData = obs_data_create();
+			obs_data_array_t *orderArray = obs_data_array_create();
+
+			for (const std::string &uuid : scenePair.second) {
+				obs_data_t *entry = obs_data_create();
+				obs_data_set_string(entry, "uuid", uuid.c_str());
+				obs_data_array_push_back(orderArray, entry);
+				obs_data_release(entry);
+			}
+
+			obs_data_set_array(sceneData, "order", orderArray);
+			obs_data_set_obj(scenes, scenePair.first.c_str(), sceneData);
+
+			obs_data_array_release(orderArray);
+			obs_data_release(sceneData);
 		}
 
-		obs_data_set_array(collectionData, "order", orderArray);
-		obs_data_set_obj(collections, pair.first.c_str(), collectionData);
+		obs_data_set_obj(collectionData, "scenes", scenes);
+		obs_data_set_obj(collections, collPair.first.c_str(), collectionData);
 
-		obs_data_array_release(orderArray);
+		obs_data_release(scenes);
 		obs_data_release(collectionData);
 	}
 
@@ -134,23 +164,31 @@ void OrderManager::SetCurrentCollection(const std::string &collectionName)
 	currentCollection = collectionName;
 }
 
+void OrderManager::SetCurrentScene(const std::string &sceneName)
+{
+	currentScene = sceneName;
+}
+
 std::vector<std::string> OrderManager::GetOrder() const
 {
-	auto it = orderByCollection.find(currentCollection);
-	if (it != orderByCollection.end()) {
-		return it->second;
+	auto collIt = orderByCollectionScene.find(currentCollection);
+	if (collIt != orderByCollectionScene.end()) {
+		auto sceneIt = collIt->second.find(currentScene);
+		if (sceneIt != collIt->second.end()) {
+			return sceneIt->second;
+		}
 	}
 	return {};
 }
 
 void OrderManager::SetOrder(const std::vector<std::string> &uuids)
 {
-	orderByCollection[currentCollection] = uuids;
+	orderByCollectionScene[currentCollection][currentScene] = uuids;
 }
 
 void OrderManager::AddSource(const std::string &uuid)
 {
-	auto &order = orderByCollection[currentCollection];
+	auto &order = orderByCollectionScene[currentCollection][currentScene];
 
 	// Don't add duplicates
 	if (std::find(order.begin(), order.end(), uuid) == order.end()) {
@@ -160,9 +198,12 @@ void OrderManager::AddSource(const std::string &uuid)
 
 void OrderManager::RemoveSource(const std::string &uuid)
 {
-	auto it = orderByCollection.find(currentCollection);
-	if (it != orderByCollection.end()) {
-		auto &order = it->second;
-		order.erase(std::remove(order.begin(), order.end(), uuid), order.end());
+	auto collIt = orderByCollectionScene.find(currentCollection);
+	if (collIt != orderByCollectionScene.end()) {
+		auto sceneIt = collIt->second.find(currentScene);
+		if (sceneIt != collIt->second.end()) {
+			auto &order = sceneIt->second;
+			order.erase(std::remove(order.begin(), order.end(), uuid), order.end());
+		}
 	}
 }

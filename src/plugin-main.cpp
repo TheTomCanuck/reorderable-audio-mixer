@@ -21,6 +21,9 @@ static void frontend_event_callback(obs_frontend_event event, void *)
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 		QMetaObject::invokeMethod(mixer_dock, "OnSceneCollectionChanged");
 		break;
+	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
+		QMetaObject::invokeMethod(mixer_dock, "OnSceneChanged");
+		break;
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
 		QMetaObject::invokeMethod(mixer_dock, "OnFinishedLoading");
 		break;

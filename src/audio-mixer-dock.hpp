@@ -41,6 +41,7 @@ public:
 
 public slots:
 	void OnSceneCollectionChanged();
+	void OnSceneChanged();
 	void OnFinishedLoading();
 	void SaveOrder();
 	void OnExit();

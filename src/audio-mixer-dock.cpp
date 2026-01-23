@@ -30,6 +30,16 @@ AudioMixerDock::AudioMixerDock(QWidget *parent)
 		orderManager->SetCurrentCollection(collection);
 		bfree(collection);
 	}
+
+	// Try to get current scene (may not be available yet during startup)
+	obs_source_t *scene = obs_frontend_get_current_scene();
+	if (scene) {
+		const char *name = obs_source_get_name(scene);
+		if (name) {
+			orderManager->SetCurrentScene(name);
+		}
+		obs_source_release(scene);
+	}
 }
 
 AudioMixerDock::~AudioMixerDock()
@@ -306,15 +316,22 @@ void AudioMixerDock::OnMoveUpClicked()
 	// Swap in our local list for immediate UI feedback
 	std::swap(mixerItems[index], mixerItems[index - 1]);
 
-	// Swap their positions in the global order (preserves all other positions)
+	// Get the scene's saved order
 	std::vector<std::string> order = orderManager->GetOrder();
 	auto itSelected = std::find(order.begin(), order.end(), uuidSelected);
 	auto itAbove = std::find(order.begin(), order.end(), uuidAbove);
 
 	if (itSelected != order.end() && itAbove != order.end()) {
+		// Both found in order, swap their positions
 		std::iter_swap(itSelected, itAbove);
-		orderManager->SetOrder(order);
+	} else {
+		// Scene has no saved order or items missing - build from current visible items
+		order.clear();
+		for (MixerItem *mi : mixerItems) {
+			order.push_back(mi->GetSourceUUID().toStdString());
+		}
 	}
+	orderManager->SetOrder(order);
 
 	// Refresh layout (also saves)
 	RefreshMixerLayout();
@@ -336,15 +353,22 @@ void AudioMixerDock::OnMoveDownClicked()
 	// Swap in our local list for immediate UI feedback
 	std::swap(mixerItems[index], mixerItems[index + 1]);
 
-	// Swap their positions in the global order (preserves all other positions)
+	// Get the scene's saved order
 	std::vector<std::string> order = orderManager->GetOrder();
 	auto itSelected = std::find(order.begin(), order.end(), uuidSelected);
 	auto itBelow = std::find(order.begin(), order.end(), uuidBelow);
 
 	if (itSelected != order.end() && itBelow != order.end()) {
+		// Both found in order, swap their positions
 		std::iter_swap(itSelected, itBelow);
-		orderManager->SetOrder(order);
+	} else {
+		// Scene has no saved order or items missing - build from current visible items
+		order.clear();
+		for (MixerItem *mi : mixerItems) {
+			order.push_back(mi->GetSourceUUID().toStdString());
+		}
 	}
+	orderManager->SetOrder(order);
 
 	// Refresh layout (also saves)
 	RefreshMixerLayout();
@@ -461,8 +485,35 @@ void AudioMixerDock::OnSceneCollectionChanged()
 		bfree(collection);
 	}
 
+	// Update scene name
+	obs_source_t *scene = obs_frontend_get_current_scene();
+	if (scene) {
+		const char *name = obs_source_get_name(scene);
+		if (name) {
+			orderManager->SetCurrentScene(name);
+		}
+		obs_source_release(scene);
+	}
+
 	// Re-enumerate sources
 	EnumerateAudioSources();
+}
+
+void AudioMixerDock::OnSceneChanged()
+{
+	// Update scene name in order manager
+	obs_source_t *scene = obs_frontend_get_current_scene();
+	if (scene) {
+		const char *name = obs_source_get_name(scene);
+		if (name) {
+			orderManager->SetCurrentScene(name);
+		}
+		obs_source_release(scene);
+	}
+
+	// Refresh layout to apply the new scene's order
+	// This will re-sort based on the new scene's saved order (or alphabetical if none)
+	RefreshMixerLayout();
 }
 
 void AudioMixerDock::OnFinishedLoading()
@@ -470,6 +521,16 @@ void AudioMixerDock::OnFinishedLoading()
 	// Re-apply vertical layout preference in case it wasn't ready during construction
 	if (orderManager->IsVerticalLayout() && !vertical) {
 		SetVerticalLayout(true);
+	}
+
+	// Set current scene (should be available now after OBS finished loading)
+	obs_source_t *scene = obs_frontend_get_current_scene();
+	if (scene) {
+		const char *name = obs_source_get_name(scene);
+		if (name) {
+			orderManager->SetCurrentScene(name);
+		}
+		obs_source_release(scene);
 	}
 
 	EnumerateAudioSources();
