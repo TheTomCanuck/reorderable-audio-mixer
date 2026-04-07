@@ -297,10 +297,6 @@ void MixerItem::SetVertical(bool vert)
 		mainLayout->setContentsMargins(4, 4, 4, 4);
 		mainLayout->setSpacing(2);
 
-		// Name at top - use small fixed font size for vertical mode
-		QFont smallFont = nameLabel->font();
-		smallFont.setPixelSize(10);  // Small fixed pixel size for vertical layout
-		nameLabel->setFont(smallFont);
 		nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 		nameLabel->setWordWrap(false);
 		nameLabel->setTextFormat(Qt::PlainText);
@@ -346,10 +342,6 @@ void MixerItem::SetVertical(bool vert)
 		mainLayout->setContentsMargins(6, 6, 6, 6);
 		mainLayout->setSpacing(2);
 
-		// Row 1: Name - restore normal font size
-		QFont normalFont = nameLabel->font();
-		normalFont.setPixelSize(13);  // Normal pixel size for horizontal layout
-		nameLabel->setFont(normalFont);
 		QHBoxLayout *nameRow = new QHBoxLayout();
 		nameRow->setSpacing(4);
 		nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -419,6 +411,16 @@ void MixerItem::UpdateSelectionStyle()
 		setStyleSheet("MixerItem { border: 2px solid palette(highlight); }");
 	} else {
 		setStyleSheet("");
+	}
+
+	// Re-rotate config icon if in vertical mode (stylesheet repolish resets it)
+	if (vertical) {
+		QTimer::singleShot(0, configButton, [btn = configButton]() {
+			QPixmap pix = btn->icon().pixmap(16, 16);
+			QTransform t;
+			t.rotate(90);
+			btn->setIcon(QIcon(pix.transformed(t, Qt::SmoothTransformation)));
+		});
 	}
 }
 
