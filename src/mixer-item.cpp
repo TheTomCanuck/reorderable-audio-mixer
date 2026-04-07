@@ -6,8 +6,12 @@
 
 #include <QCursor>
 #include <QAction>
+#include <QIcon>
 #include <QMainWindow>
 #include <QMouseEvent>
+#include <QStyle>
+#include <QTimer>
+#include <QTransform>
 #include <cmath>
 
 MixerItem::MixerItem(OBSSource source_, bool vertical_, QWidget *parent)
@@ -98,9 +102,12 @@ void MixerItem::SetupUI()
 	meterRow->setSpacing(4);
 
 	configButton = new QPushButton();
+	configButton->setMaximumSize(22, 22);
+	configButton->setIcon(QIcon(":/settings/images/settings/general.svg"));
+	configButton->setProperty("themeID", "menuIconSmall");
 	configButton->setProperty("class", "icon-dots-vert");
-	configButton->setFixedSize(22, 22);
-	configButton->setFlat(true);
+	configButton->setProperty("toolButton", true);
+	configButton->setFlat(false);
 	configButton->setToolTip(obs_module_text("BetterAudioMixer.Config"));
 	connect(configButton, &QPushButton::clicked, this, &MixerItem::OnConfigClicked);
 	meterRow->addWidget(configButton);
@@ -122,13 +129,19 @@ void MixerItem::SetupUI()
 	QHBoxLayout *sliderRow = new QHBoxLayout();
 	sliderRow->setSpacing(4);
 
-	muteCheckbox = new QCheckBox();
-	muteCheckbox->setProperty("class", "indicator-mute");
-	muteCheckbox->setFixedSize(22, 22);
-	muteCheckbox->setToolTip(obs_module_text("BetterAudioMixer.Mute"));
-	muteCheckbox->setChecked(obs_source_muted(source));
-	connect(muteCheckbox, &QCheckBox::toggled, this, &MixerItem::OnMuteToggled);
-	sliderRow->addWidget(muteCheckbox);
+	muteButton = new QPushButton();
+	muteButton->setCheckable(true);
+	bool muted = obs_source_muted(source);
+	muteButton->setChecked(muted);
+	muteButton->setIcon(QIcon(muted ? ":/res/images/mute.svg"
+					: ":/settings/images/settings/audio.svg"));
+	muteButton->setIconSize(QSize(16, 16));
+	muteButton->setProperty("class", "btn-mute");
+	muteButton->setFixedSize(22, 22);
+	muteButton->setFlat(true);
+	muteButton->setToolTip(obs_module_text("BetterAudioMixer.Mute"));
+	connect(muteButton, &QPushButton::toggled, this, &MixerItem::OnMuteToggled);
+	sliderRow->addWidget(muteButton);
 
 	slider = new QSlider(Qt::Horizontal);
 	slider->setMinimum(0);
@@ -212,9 +225,12 @@ void MixerItem::VolumeChanged()
 
 void MixerItem::VolumeMuted(bool muted)
 {
-	muteCheckbox->blockSignals(true);
-	muteCheckbox->setChecked(muted);
-	muteCheckbox->blockSignals(false);
+	muteButton->blockSignals(true);
+	muteButton->setChecked(muted);
+	muteButton->blockSignals(false);
+
+	muteButton->setIcon(QIcon(muted ? ":/res/images/mute.svg"
+					: ":/settings/images/settings/audio.svg"));
 
 	if (volMeter) {
 		volMeter->muted = muted;
@@ -262,7 +278,7 @@ void MixerItem::SetVertical(bool vert)
 	if (oldLayout) {
 		// Reparent all widgets to this before deleting layout
 		QList<QWidget *> widgets;
-		widgets << nameLabel << configButton << volMeter << volLabel << muteCheckbox << slider;
+		widgets << nameLabel << configButton << volMeter << volLabel << muteButton << slider;
 		for (QWidget *w : widgets) {
 			if (w)
 				w->setParent(this);
@@ -290,27 +306,28 @@ void MixerItem::SetVertical(bool vert)
 		nameLabel->setTextFormat(Qt::PlainText);
 		mainLayout->addWidget(nameLabel);
 
-		// Config and mute buttons row
+		// Buttons row
 		QHBoxLayout *buttonRow = new QHBoxLayout();
 		buttonRow->setSpacing(2);
 		buttonRow->addWidget(configButton);
+		buttonRow->addWidget(muteButton);
 		buttonRow->addStretch();
-		buttonRow->addWidget(muteCheckbox);
 		mainLayout->addLayout(buttonRow);
 
-		// Meter and slider side by side
-		QHBoxLayout *meterSliderRow = new QHBoxLayout();
-		meterSliderRow->setSpacing(4);
+		configButton->setStyleSheet("max-height: 14px; max-width: 28px;");
 
-		// Vertical meter on left
+		// Raise buttons above meter so they receive clicks
+		configButton->raise();
+		muteButton->raise();
+
+		QHBoxLayout *meterSliderRow = new QHBoxLayout();
+		meterSliderRow->setSpacing(0);
+		meterSliderRow->setContentsMargins(0, 0, 0, 0);
 		volMeter->setVertical(true);
 		meterSliderRow->addWidget(volMeter);
-
-		// Vertical slider on right
 		slider->setOrientation(Qt::Vertical);
 		slider->setMinimumHeight(60);
 		meterSliderRow->addWidget(slider);
-
 		mainLayout->addLayout(meterSliderRow, 1);
 
 		// Volume label at bottom
@@ -320,8 +337,8 @@ void MixerItem::SetVertical(bool vert)
 
 		// Set size policy for vertical mode
 		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-		setMinimumWidth(90);
-		setMaximumWidth(120);
+		setMinimumWidth(70);
+		setMaximumWidth(85);
 	} else {
 		// Horizontal layout: wide row with horizontal slider/meter
 		// Same as original SetupUI layout
@@ -340,6 +357,8 @@ void MixerItem::SetVertical(bool vert)
 		mainLayout->addLayout(nameRow);
 
 		// Row 2: Config button + Volume meter + dB label
+		configButton->setStyleSheet("");
+		configButton->setMaximumSize(22, 22);
 		QHBoxLayout *meterRow = new QHBoxLayout();
 		meterRow->setSpacing(4);
 		meterRow->addWidget(configButton);
@@ -352,7 +371,7 @@ void MixerItem::SetVertical(bool vert)
 		// Row 3: Mute checkbox + Slider + Spacer
 		QHBoxLayout *sliderRow = new QHBoxLayout();
 		sliderRow->setSpacing(4);
-		sliderRow->addWidget(muteCheckbox);
+		sliderRow->addWidget(muteButton);
 		slider->setOrientation(Qt::Horizontal);
 		slider->setMinimumHeight(0);
 		sliderRow->addWidget(slider, 1);
@@ -366,6 +385,22 @@ void MixerItem::SetVertical(bool vert)
 		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 		setMinimumWidth(0);
 		setMaximumWidth(QWIDGETSIZE_MAX);
+	}
+
+	// Repolish after layout change
+	configButton->style()->unpolish(configButton);
+	configButton->style()->polish(configButton);
+	muteButton->style()->unpolish(muteButton);
+	muteButton->style()->polish(muteButton);
+
+	// Rotate dots icon for vertical mode
+	if (vertical) {
+		QTimer::singleShot(0, configButton, [btn = configButton]() {
+			QPixmap pix = btn->icon().pixmap(16, 16);
+			QTransform t;
+			t.rotate(90);
+			btn->setIcon(QIcon(pix.transformed(t, Qt::SmoothTransformation)));
+		});
 	}
 }
 

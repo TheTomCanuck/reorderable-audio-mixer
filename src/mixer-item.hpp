@@ -6,7 +6,6 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSlider>
-#include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -75,7 +74,7 @@ private:
 	QLabel *volLabel = nullptr;
 	VolumeMeter *volMeter = nullptr;
 	QSlider *slider = nullptr;
-	QCheckBox *muteCheckbox = nullptr;
+	QPushButton *muteButton = nullptr;
 	QPushButton *configButton = nullptr;
 
 	// OBS handles

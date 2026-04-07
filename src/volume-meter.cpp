@@ -27,10 +27,9 @@ VolumeMeter::VolumeMeter(QWidget *parent, bool vert)
 
 	// Set minimum size based on orientation and channel count
 	if (vertical) {
-		// Match OBS calculation: meter width + tick marks + scale label width + spacing
 		int meterWidth = displayNrAudioChannels * (meterThickness + 1) - 1;
 		QRect scaleBounds = metrics.boundingRect("-88");
-		setMinimumSize(meterWidth + 10 + scaleBounds.width() + 2, 100);
+		setMinimumSize(meterWidth + 4 + scaleBounds.width() + 2, 100);
 		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	} else {
 		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 4 + metrics.capHeight();
@@ -55,12 +54,12 @@ void VolumeMeter::setVertical(bool vert)
 
 	vertical = vert;
 
-	// Update size policy - match OBS calculation
+	// Update size policy
 	QFontMetrics metrics(tickFont);
 	if (vertical) {
 		int meterWidth = displayNrAudioChannels * (meterThickness + 1) - 1;
 		QRect scaleBounds = metrics.boundingRect("-88");
-		setMinimumSize(meterWidth + 10 + scaleBounds.width() + 2, 100);
+		setMinimumSize(meterWidth + 4 + scaleBounds.width() + 2, 100);
 		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	} else {
 		int minHeight = displayNrAudioChannels * (meterThickness + 1) - 1 + 4 + metrics.capHeight();
