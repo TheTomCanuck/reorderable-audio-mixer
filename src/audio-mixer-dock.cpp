@@ -160,6 +160,44 @@ void AudioMixerDock::ConnectSignalHandlers()
 				Q_ARG(OBSSource, OBSSource(source)));
 		}, this);
 
+	// Source removed (user deleted it)
+	signalHandlers.emplace_back(handler, "source_remove",
+		[](void *data, calldata_t *params) {
+			auto *dock = static_cast<AudioMixerDock *>(data);
+			obs_source_t *source = static_cast<obs_source_t *>(calldata_ptr(params, "source"));
+
+			uint32_t flags = obs_source_get_output_flags(source);
+			if (!(flags & OBS_SOURCE_AUDIO))
+				return;
+
+			const char *uuid = obs_source_get_uuid(source);
+			if (!uuid)
+				return;
+
+			QMetaObject::invokeMethod(dock, "RemoveAudioSourceByUUID",
+				Qt::QueuedConnection,
+				Q_ARG(QString, QString::fromUtf8(uuid)));
+		}, this);
+
+	// Source destroyed (defensive — fires when refcount reaches zero)
+	signalHandlers.emplace_back(handler, "source_destroy",
+		[](void *data, calldata_t *params) {
+			auto *dock = static_cast<AudioMixerDock *>(data);
+			obs_source_t *source = static_cast<obs_source_t *>(calldata_ptr(params, "source"));
+
+			uint32_t flags = obs_source_get_output_flags(source);
+			if (!(flags & OBS_SOURCE_AUDIO))
+				return;
+
+			const char *uuid = obs_source_get_uuid(source);
+			if (!uuid)
+				return;
+
+			QMetaObject::invokeMethod(dock, "RemoveAudioSourceByUUID",
+				Qt::QueuedConnection,
+				Q_ARG(QString, QString::fromUtf8(uuid)));
+		}, this);
+
 	// Source renamed
 	signalHandlers.emplace_back(handler, "source_rename",
 		[](void *data, calldata_t *params) {
@@ -455,6 +493,38 @@ void AudioMixerDock::DeactivateAudioSource(OBSSource source)
 	item->deleteLater();
 
 	// Update empty state and buttons
+	emptyLabel->setVisible(mixerItems.empty());
+	UpdateToolbarButtons();
+}
+
+void AudioMixerDock::RemoveAudioSourceByUUID(QString uuid)
+{
+	MixerItem *item = nullptr;
+	for (MixerItem *mi : mixerItems) {
+		if (mi->GetSourceUUID() == uuid) {
+			item = mi;
+			break;
+		}
+	}
+	if (!item)
+		return;
+
+	if (selectedItem == item)
+		selectedItem = nullptr;
+
+	auto it = std::find(mixerItems.begin(), mixerItems.end(), item);
+	if (it != mixerItems.end())
+		mixerItems.erase(it);
+
+	mixerLayout->removeWidget(item);
+	item->Cleanup();
+	item->hide();
+	item->deleteLater();
+
+	// Source is gone for good — prune from saved order
+	orderManager->RemoveSource(uuid.toStdString());
+	orderManager->Save();
+
 	emptyLabel->setVisible(mixerItems.empty());
 	UpdateToolbarButtons();
 }

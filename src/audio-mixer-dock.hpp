@@ -48,6 +48,7 @@ public slots:
 
 	void ActivateAudioSource(OBSSource source);
 	void DeactivateAudioSource(OBSSource source);
+	void RemoveAudioSourceByUUID(QString uuid);
 	void OnSourceRenamed(QString newName, QString prevName);
 
 	void HideSource(OBSSource source);
